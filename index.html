@@ -42,6 +42,7 @@
   html{scroll-behavior:smooth}
   body{
     margin:0;
+    position:relative;
     font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     background:var(--paper);
     color:var(--ink);
@@ -49,18 +50,27 @@
     -webkit-font-smoothing:antialiased;
   }
 
-  /* ---------- Page watermark: Merlion, fixed behind all content ---------- */
+  /* ---------- Page watermark: Merlion emblem, anchored to the page's
+     bottom-right corner and dissolving outward — a quiet signature,
+     not a floating photo. Tinted into the site's own teal (duotone)
+     so it reads as part of the theme rather than a pasted-in picture. ---------- */
   .page-watermark{
-    position:fixed;inset:0;z-index:-1;
-    background-image:url('https://images.unsplash.com/photo-1687174885221-80ad758544a7?auto=format&fit=crop&w=1400&q=70');
-    background-repeat:no-repeat;
-    background-position:center 62%;
-    background-size:min(640px, 88vw) auto;
-    opacity:.3;
-    pointer-events:none;
+    position:absolute;left:0;right:0;bottom:0;height:460px;
+    z-index:-1;overflow:hidden;pointer-events:none;
+    -webkit-mask-image:radial-gradient(circle at 100% 100%, black 0%, black 38%, transparent 72%);
+    mask-image:radial-gradient(circle at 100% 100%, black 0%, black 38%, transparent 72%);
   }
+  .page-watermark .art{
+    position:absolute;right:-10px;bottom:-10px;width:360px;height:460px;
+    background-image:url('https://images.unsplash.com/photo-1687174885221-80ad758544a7?auto=format&fit=crop&w=900&h=1200&q=70');
+    background-repeat:no-repeat;background-position:bottom right;background-size:cover;
+    filter:grayscale(1) contrast(1.08) brightness(1.1);
+    opacity:.5;
+  }
+  .page-watermark .tint{position:absolute;inset:0;background:var(--sea);mix-blend-mode:color}
   @media (min-width:640px){
-    .page-watermark{background-size:520px auto;background-position:center 55%}
+    .page-watermark{height:560px}
+    .page-watermark .art{width:440px;height:560px}
   }
 
   /* ---------- Header: Gardens by the Bay at dusk ---------- */
@@ -205,7 +215,10 @@
 </head>
 <body>
 
-<div class="page-watermark" aria-hidden="true"></div>
+<div class="page-watermark" aria-hidden="true">
+  <div class="art"></div>
+  <div class="tint"></div>
+</div>
 
 <header class="hero">
   <div class="hero-bg"></div>
