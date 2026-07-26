@@ -178,6 +178,62 @@
   .sec-head h2{margin:0;font-family:'Fraunces',Georgia,serif;font-size:23px;font-weight:600;letter-spacing:-.01em}
   .sec-head .count{margin-left:auto;font-size:12px;color:var(--mist);font-weight:500}
 
+  /* ---------- Overview dashboard ---------- */
+  .ov-hero{
+    background:linear-gradient(135deg, var(--petrol) 0%, var(--petrol-2) 100%);
+    color:#eaf5f0;border-radius:var(--radius);padding:26px 24px;margin-bottom:14px;
+    position:relative;overflow:hidden;
+  }
+  .ov-hero::after{
+    content:"";position:absolute;right:-30px;bottom:-40px;width:180px;height:180px;border-radius:50%;
+    background:radial-gradient(circle, rgba(95,214,180,.16), transparent 68%);pointer-events:none;
+  }
+  .ov-count{display:flex;align-items:baseline;gap:12px;position:relative;z-index:1}
+  .ov-count .num{font-family:'Fraunces',serif;font-size:clamp(46px,12vw,68px);font-weight:600;line-height:.9;color:#fff}
+  .ov-count .unit{font-size:15px;color:var(--jade-bright);font-weight:600;letter-spacing:.02em}
+  .ov-count .phase{
+    font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--petrol);background:var(--jade-bright);padding:5px 11px;border-radius:999px;
+    align-self:center;margin-left:auto;position:relative;z-index:1;
+  }
+  .ov-daterange{margin:12px 0 0;font-size:14px;color:#bcd8ce;position:relative;z-index:1}
+
+  .ov-block-label{
+    font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--mist);margin:22px 2px 10px;
+  }
+  .ov-next{
+    background:var(--card);border:1px solid var(--line);border-left:4px solid var(--next);
+    border-radius:var(--radius);padding:16px 18px;margin-bottom:6px;display:block;text-decoration:none;color:inherit;
+    box-shadow:var(--shadow-sm);transition:box-shadow .2s,transform .2s;
+  }
+  .ov-next:hover{box-shadow:var(--shadow);transform:translateY(-1px)}
+  .ov-next .row1{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .ov-next .tag{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--next);background:var(--next-soft);padding:3px 9px;border-radius:999px}
+  .ov-next .when{font-size:12.5px;color:var(--mist);font-weight:600;margin-left:auto}
+  .ov-next .title{font-family:'Fraunces',serif;font-size:20px;font-weight:600;color:var(--ink);letter-spacing:-.01em}
+  .ov-next .meta{font-size:13.5px;color:var(--ink-soft);margin-top:3px}
+  .ov-next .meta a{color:var(--jade);text-decoration:none}
+
+  .ov-today{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--card)}
+  .ov-today li{display:flex;gap:12px;align-items:flex-start;padding:12px 16px;border-bottom:1px solid var(--line-soft)}
+  .ov-today li:last-child{border-bottom:0}
+  .ov-today .t{font-size:12px;font-weight:700;color:var(--jade);white-space:nowrap;padding-top:2px;min-width:64px}
+  .ov-today .a{font-size:14px;font-weight:600;color:var(--ink)}
+  .ov-today .l{font-size:12.5px;color:var(--ink-soft);margin-top:1px}
+  .ov-empty{font-size:13.5px;color:var(--mist);padding:14px 16px;border:1px dashed var(--line);border-radius:var(--radius);background:var(--card)}
+
+  .ov-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px}
+  .ov-tile{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius-sm);
+    padding:14px 12px;text-align:center;cursor:pointer;text-decoration:none;color:inherit;
+    transition:box-shadow .18s,transform .18s,border-color .18s;
+  }
+  .ov-tile:hover{box-shadow:var(--shadow-sm);transform:translateY(-1px);border-color:var(--jade-soft)}
+  .ov-tile .n{font-family:'Fraunces',serif;font-size:26px;font-weight:600;color:var(--jade);line-height:1}
+  .ov-tile .k{font-size:11.5px;color:var(--ink-soft);margin-top:4px;font-weight:600}
+  .ov-tile .ic{font-size:15px;display:block;margin-bottom:3px}
+
   /* ---------- Status pill ---------- */
   .pill{
     font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
@@ -547,11 +603,13 @@ async function loadSection(sec){
     if(!res.ok) throw new Error(`HTTP ${res.status} from Google — usually a sharing/permission issue, not a missing tab.`);
     if(!/setResponse/.test(text)) throw new Error(`Google didn't return sheet data (got a login/error page instead). Check the sheet is shared as "Anyone with the link — Viewer".`);
     const { rows } = parseGviz(text);
+    SECTION_DATA[sec.id] = rows;                       // cache for the Overview
     el.innerHTML = sec.render==="timeline" ? renderTimeline(rows, sec) : renderCards(rows, sec);
     const cnt = document.getElementById("count-"+sec.id);
     if(cnt) cnt.textContent = rows.length ? `${rows.length} item${rows.length>1?"s":""}` : "";
     return true;
   }catch(err){
+    SECTION_DATA[sec.id] = [];
     const isNetworkBlock = err instanceof TypeError;
     const msg = isNetworkBlock
       ? `Couldn't reach Google Sheets at all. If you opened this file directly (file://) instead of a hosted link, your browser blocks the request — host the file (e.g. Netlify Drop) and reopen it from that URL.`
@@ -561,6 +619,159 @@ async function loadSection(sec){
   }
 }
 
+// Cache of parsed rows per section id, populated by loadSection.
+const SECTION_DATA = {};
+
+// ---------- Overview dashboard ----------
+function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+
+// Collect every dated item across sections into one list for "what's next".
+function collectDatedItems(){
+  const out = [];
+  SECTIONS.forEach(sec=>{
+    if(sec.id==="overview" || sec.dated==="none") return;
+    const rows = SECTION_DATA[sec.id] || [];
+    rows.forEach(r=>{
+      let dt=null, endDt=null;
+      if(sec.dated==="range"){
+        dt = parseDateLoose(checkinKey(r) && r[checkinKey(r)]);
+        endDt = parseDateLoose(checkoutKey(r) && r[checkoutKey(r)]);
+      } else {
+        dt = combineDateTime(dateKey(r)&&r[dateKey(r)], timeKey(r)&&r[timeKey(r)]);
+      }
+      if(!dt) return;
+      const tKey = titleKey(r);
+      const locK = Object.keys(r).find(k=>/location|venue|place|address|from.?to/i.test(k));
+      out.push({
+        section: sec, dt, endDt,
+        title: r[tKey] || sec.label,
+        time: (timeKey(r) && r[timeKey(r)]) || "",
+        loc: (locK && r[locK]) || "",
+        locKey: locK || "",
+      });
+    });
+  });
+  return out.sort((a,b)=>a.dt-b.dt);
+}
+
+// Trip window = earliest and latest dated items.
+function tripWindow(items){
+  if(!items.length) return null;
+  const starts = items.map(i=>i.dt.getTime());
+  const ends = items.map(i=>(i.endDt||i.dt).getTime());
+  return { start:new Date(Math.min(...starts)), end:new Date(Math.max(...ends)) };
+}
+
+function buildOverview(){
+  const el = document.getElementById("sec-body-overview");
+  if(!el) return;
+  const items = collectDatedItems();
+  const now = NOW, today = startOfDay(now);
+
+  // --- 1. Countdown + phase ---
+  const win = tripWindow(items);
+  let countHTML = "";
+  if(win){
+    const tripStart = startOfDay(win.start), tripEnd = startOfDay(win.end);
+    const dayMs = 86400000;
+    let num, unit, phase, phaseCls;
+    if(today < tripStart){
+      num = Math.round((tripStart - today)/dayMs);
+      unit = num===1 ? "day to go" : "days to go";
+      phase = "Countdown"; 
+    } else if(today > tripEnd){
+      num = Math.round((today - tripEnd)/dayMs);
+      unit = num===1 ? "day since" : "days since";
+      phase = "Trip complete";
+    } else {
+      num = Math.round((today - tripStart)/dayMs) + 1;
+      const total = Math.round((tripEnd - tripStart)/dayMs) + 1;
+      unit = `of ${total} · you're here!`;
+      phase = "On the trip";
+    }
+    const fmt = d => d.toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"});
+    countHTML = `
+      <div class="ov-hero">
+        <div class="ov-count">
+          <span class="num">${num}</span>
+          <span class="unit">${esc(unit)}</span>
+          <span class="phase">${esc(phase)}</span>
+        </div>
+        <p class="ov-daterange">${esc(fmt(win.start))} → ${esc(fmt(win.end))}</p>
+      </div>`;
+  }
+
+  // --- 2. What's next (nearest upcoming item across everything) ---
+  const upcoming = items.filter(i=>i.dt.getTime() >= now.getTime());
+  let nextHTML = "";
+  if(upcoming.length){
+    const n = upcoming[0];
+    const whenStr = n.dt.toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short"}) + (n.time?` · ${n.time}`:"");
+    const locHTML = n.loc ? `<div class="meta">${smartValue(n.locKey, n.loc)}</div>` : "";
+    nextHTML = `
+      <p class="ov-block-label">Up next</p>
+      <a class="ov-next" href="#" data-goto="${n.section.id}">
+        <div class="row1">
+          <span class="tag">${n.section.icon} ${esc(n.section.label)}</span>
+          <span class="when">${esc(whenStr)}</span>
+        </div>
+        <div class="title">${esc(n.title)}</div>
+        ${locHTML}
+      </a>`;
+  }
+
+  // --- 3. Today's plan (itinerary items dated today) ---
+  let todayHTML = "";
+  const itinRows = SECTION_DATA["itinerary"] || [];
+  if(itinRows.length){
+    const keys = Object.keys(itinRows[0]);
+    const dK = keys.find(k=>/date|day/i.test(k)) || keys[0];
+    const tK = keys.find(k=>/time/i.test(k));
+    const aK = keys.find(k=>/activity|event|title|plan/i.test(k)) || keys[1] || keys[0];
+    const lK = keys.find(k=>/location|venue|place|address/i.test(k));
+    const todays = itinRows.filter(r=>{
+      const d = parseDateLoose(r[dK]);
+      return d && startOfDay(d).getTime() === today.getTime();
+    });
+    if(todays.length){
+      todayHTML = `
+        <p class="ov-block-label">Today's plan</p>
+        <ul class="ov-today">
+          ${todays.map(r=>`
+            <li>
+              <span class="t">${esc((tK&&r[tK])||"—")}</span>
+              <span><span class="a">${esc(r[aK]||"")}</span>${lK&&r[lK]?`<div class="l">${esc(r[lK])}</div>`:""}</span>
+            </li>`).join("")}
+        </ul>`;
+    }
+  }
+
+  // --- 4. Quick counts + jump links ---
+  const countable = SECTIONS.filter(s=>s.id!=="overview");
+  const tilesHTML = `
+    <p class="ov-block-label">Everything in this trip</p>
+    <div class="ov-counts">
+      ${countable.map(s=>{
+        const n = (SECTION_DATA[s.id]||[]).length;
+        return `<a class="ov-tile" href="#" data-goto="${s.id}">
+          <span class="ic">${s.icon}</span>
+          <span class="n">${n}</span>
+          <span class="k">${esc(s.label)}</span>
+        </a>`;
+      }).join("")}
+    </div>`;
+
+  const anyData = items.length || countable.some(s=>(SECTION_DATA[s.id]||[]).length);
+  el.innerHTML = anyData
+    ? (countHTML + nextHTML + todayHTML + tilesHTML)
+    : `<div class="state">Your trip overview will appear here once details are added to the sheet.</div>`;
+
+  // wire jump links
+  el.querySelectorAll("[data-goto]").forEach(a=>{
+    a.addEventListener("click", e=>{ e.preventDefault(); activate(a.dataset.goto); window.scrollTo({top:0,behavior:"smooth"}); });
+  });
+}
+
 // ---------- tab switching ----------
 function activate(id){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active", b.dataset.id===id));
@@ -568,24 +779,28 @@ function activate(id){
 }
 
 function boot(){
+  // Overview is a virtual section (no sheet tab) shown first.
+  const NAV = [{ id:"overview", label:"Overview", icon:"✨", overview:true }, ...SECTIONS];
+
   document.getElementById("nav").innerHTML =
-    SECTIONS.map((s,i)=>`<button type="button" data-id="${s.id}" class="${i===0?'active':''}">${s.icon} ${s.label}</button>`).join("");
+    NAV.map((s,i)=>`<button type="button" data-id="${s.id}" class="${i===0?'active':''}"><span class="ic">${s.icon}</span>${s.label}</button>`).join("");
   document.getElementById("nav").addEventListener("click", e=>{
     const btn = e.target.closest("button[data-id]");
     if(btn) activate(btn.dataset.id);
   });
 
-  document.getElementById("app").innerHTML = SECTIONS.map((s,i)=>`
+  document.getElementById("app").innerHTML = NAV.map((s,i)=>`
     <section class="panel ${i===0?'is-active':''}" id="${s.id}">
-      <div class="sec-head">
+      ${s.overview ? "" : `<div class="sec-head">
         <span class="sec-icon">${s.icon}</span>
         <h2>${s.label}</h2>
         <span class="count" id="count-${s.id}"></span>
-      </div>
-      <div id="sec-body-${s.id}"><div class="skeleton"></div><div class="skeleton"></div></div>
+      </div>`}
+      <div id="sec-body-${s.id}">${s.overview ? `<div class="skeleton"></div><div class="skeleton"></div>` : `<div class="skeleton"></div><div class="skeleton"></div>`}</div>
     </section>`).join("");
 
   Promise.all(SECTIONS.map(loadSection)).then(()=>{
+    buildOverview();
     document.getElementById("updated").textContent =
       "Updated " + new Date().toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});
   });
