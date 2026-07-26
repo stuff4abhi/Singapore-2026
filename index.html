@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Our Trip · Singapore</title>
+<style>
+  /* =========================================================
+     CONFIG — the only thing your family may ever need to touch.
+     If you rename a tab in the Google Sheet, change its name
+     here to match EXACTLY (capitalisation and spaces matter).
+     ========================================================= */
+  /* (config lives in the <script> at the bottom, clearly marked) */
+
+  :root{
+    --ink:#1c2b2d;
+    --ink-soft:#4a5c5e;
+    --mist:#7a8a8b;
+    --paper:#f4f1ea;
+    --card:#ffffff;
+    --line:#e2ddd1;
+    --sea:#0f6e56;
+    --sea-soft:#e1f5ee;
+    --sun:#c05a2e;
+    --sun-soft:#faece7;
+    --gold:#b07d1a;
+    --shadow:0 1px 2px rgba(28,43,45,.06),0 8px 24px rgba(28,43,45,.05);
+    --radius:16px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- Header ---------- */
+  header{
+    padding:34px 20px 24px;
+    background:
+      radial-gradient(120% 90% at 85% -10%, rgba(15,110,86,.10), transparent 60%),
+      radial-gradient(120% 90% at 0% 0%, rgba(192,90,46,.08), transparent 55%);
+    border-bottom:1px solid var(--line);
+  }
+  .eyebrow{
+    font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--sea);font-weight:700;margin:0 0 6px;
+  }
+  h1{
+    margin:0;font-size:30px;line-height:1.1;font-weight:800;letter-spacing:-.02em;
+  }
+  .sub{margin:8px 0 0;color:var(--ink-soft);font-size:15px}
+  .updated{margin:14px 0 0;font-size:12px;color:var(--mist);display:flex;align-items:center;gap:6px}
+  .updated .dot{width:6px;height:6px;border-radius:50%;background:var(--sea)}
+
+  /* ---------- Section nav (sticky) ---------- */
+  nav{
+    position:sticky;top:0;z-index:20;
+    background:rgba(244,241,234,.92);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);
+    display:flex;gap:8px;overflow-x:auto;padding:12px 16px;
+    scrollbar-width:none;
+  }
+  nav::-webkit-scrollbar{display:none}
+  nav a{
+    flex:0 0 auto;text-decoration:none;font-size:13px;font-weight:600;
+    color:var(--ink-soft);background:var(--card);border:1px solid var(--line);
+    padding:8px 14px;border-radius:999px;white-space:nowrap;
+  }
+  nav a:active{background:var(--sea-soft);color:var(--sea);border-color:var(--sea)}
+
+  /* ---------- Layout ---------- */
+  main{max-width:640px;margin:0 auto;padding:8px 16px 64px}
+  section{margin-top:30px;scroll-margin-top:64px}
+  .sec-head{display:flex;align-items:baseline;gap:10px;margin:0 4px 14px}
+  .sec-head h2{margin:0;font-size:20px;font-weight:800;letter-spacing:-.01em}
+  .sec-head .count{font-size:12px;color:var(--mist);font-weight:600}
+  .sec-icon{font-size:18px}
+
+  /* ---------- Cards ---------- */
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:16px 16px 14px;margin-bottom:12px;
+  }
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .card-title{font-size:16px;font-weight:700;margin:0;letter-spacing:-.01em}
+  .pill{
+    font-size:11px;font-weight:700;letter-spacing:.03em;
+    padding:4px 9px;border-radius:999px;white-space:nowrap;
+    background:var(--sea-soft);color:var(--sea);
+  }
+  .pill.sun{background:var(--sun-soft);color:var(--sun)}
+  .rows{margin-top:12px;display:grid;grid-template-columns:auto 1fr;gap:7px 14px}
+  .rows dt{font-size:12px;color:var(--mist);font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding-top:1px}
+  .rows dd{margin:0;font-size:14px;color:var(--ink);word-break:break-word}
+  .rows dd a{color:var(--sea);font-weight:600;text-decoration:none;border-bottom:1px solid var(--sea-soft)}
+  .note{margin-top:11px;padding-top:11px;border-top:1px dashed var(--line);font-size:13px;color:var(--ink-soft)}
+
+  /* ---------- Itinerary (grouped by day) ---------- */
+  .day{margin-bottom:16px}
+  .day-label{
+    font-size:13px;font-weight:800;color:var(--sea);letter-spacing:.02em;
+    margin:0 4px 8px;display:flex;align-items:center;gap:8px;
+  }
+  .day-label .line{flex:1;height:1px;background:var(--line)}
+  .timeline{position:relative;padding-left:22px}
+  .timeline::before{content:"";position:absolute;left:6px;top:6px;bottom:6px;width:2px;background:var(--line)}
+  .stop{position:relative;margin-bottom:12px}
+  .stop::before{content:"";position:absolute;left:-19px;top:6px;width:9px;height:9px;border-radius:50%;background:var(--sea);border:2px solid var(--paper)}
+  .stop .time{font-size:12px;font-weight:700;color:var(--sun)}
+  .stop .act{font-size:15px;font-weight:600;margin:1px 0}
+  .stop .loc{font-size:13px;color:var(--ink-soft)}
+  .stop .loc a{color:var(--sea);text-decoration:none;border-bottom:1px solid var(--sea-soft)}
+  .stop .sn{font-size:13px;color:var(--mist);margin-top:2px}
+
+  /* ---------- States ---------- */
+  .state{text-align:center;padding:34px 16px;color:var(--mist);font-size:14px}
+  .state.err{color:var(--sun)}
+  .skeleton{height:92px;border-radius:var(--radius);background:linear-gradient(90deg,#efeade 25%,#f6f3ec 37%,#efeade 63%);background-size:400% 100%;animation:sh 1.3s ease infinite;margin-bottom:12px;border:1px solid var(--line)}
+  @keyframes sh{0%{background-position:100% 0}100%{background-position:-100% 0}}
+
+  footer{max-width:640px;margin:0 auto;padding:0 16px 40px;color:var(--mist);font-size:12px;text-align:center;line-height:1.7}
+  footer a{color:var(--sea);text-decoration:none}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<header>
+  <p class="eyebrow">Family trip hub</p>
+  <h1>Our Singapore Trip</h1>
+  <p class="sub">Everything in one place — tickets, stays, plans and events. Updated live from our shared sheet.</p>
+  <p class="updated"><span class="dot"></span><span id="updated">Loading latest…</span></p>
+</header>
+
+<nav id="nav"></nav>
+
+<main id="app">
+  <div class="state" id="boot">Fetching the latest trip details…</div>
+</main>
+
+<footer>
+  Content updates automatically from the shared Google Sheet.
+  <br>To edit, open the sheet on your phone and change any cell or add a row.
+</footer>
+
+<script>
+/* =============================================================
+   CONFIG  —  edit here only if you rename tabs in the Sheet
+   ============================================================= */
+const SHEET_ID = "14g3BlnqTN7z8lzcNlmtB9sPPDRKIY238NoLpiT8pels";
+
+// Each section maps to one TAB in your Google Sheet.
+// "tab" MUST match the tab name exactly. "icon" is just decoration.
+const SECTIONS = [
+  { id:"tickets",   label:"Tickets",    tab:"Tickets",    icon:"🎫", pill:"sun"  },
+  { id:"hotels",    label:"Hotels",     tab:"Hotels",     icon:"🏨", pill:"sea"  },
+  { id:"itinerary", label:"Itinerary",  tab:"Itinerary",  icon:"🗺️", render:"timeline" },
+  { id:"bookings",  label:"Bookings",   tab:"Bookings",   icon:"🎟️", pill:"sun" },
+  { id:"events",    label:"Event info", tab:"Event Info", icon:"📍", pill:"sea"  },
+];
+/* ===================== end config ===================== */
+
+const gvizURL = tab =>
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}`;
+
+// Parse Google's gviz JSONP-ish response into array of row objects.
+function parseGviz(text){
+  const start = text.indexOf("{");
+  const end   = text.lastIndexOf("}");
+  const json  = JSON.parse(text.slice(start, end + 1));
+  if(!json.table) return { headers:[], rows:[] };
+  const cols = json.table.cols.map((c,i)=> (c.label && c.label.trim()) ? c.label.trim() : `Col${i+1}`);
+  const rows = (json.table.rows||[]).map(r=>{
+    const o = {};
+    (r.c||[]).forEach((cell,i)=>{
+      let v = cell ? (cell.f != null ? cell.f : cell.v) : "";
+      o[cols[i]] = (v==null) ? "" : String(v).trim();
+    });
+    return o;
+  }).filter(o => Object.values(o).some(v => v !== ""));
+  return { headers:cols, rows };
+}
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// Turn a value into a tappable link when it looks like a URL / phone / address-y field.
+function smartValue(key, val){
+  const v = String(val);
+  if(/^https?:\/\//i.test(v)) return `<a href="${esc(v)}" target="_blank" rel="noopener">Open link</a>`;
+  if(/phone|contact|tel/i.test(key) && /[0-9]{5,}/.test(v))
+    return `<a href="tel:${esc(v.replace(/[^\d+]/g,''))}">${esc(v)}</a>`;
+  if(/address|venue|location|hotel|from.?to|from|to/i.test(key) && v.length > 3 && !/^https?:/i.test(v))
+    return `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v)}" target="_blank" rel="noopener">${esc(v)}</a>`;
+  return esc(v);
+}
+
+function titleKey(row){
+  const keys = Object.keys(row);
+  const pref = keys.find(k=>/name|event|activity|type|provider|title/i.test(k));
+  return pref || keys[0];
+}
+function pillKey(row){
+  const keys = Object.keys(row);
+  return keys.find(k=>/date|check.?in|day|time/i.test(k));
+}
+
+function renderCards(rows, sec){
+  if(!rows.length) return emptyState(sec);
+  return rows.map(row=>{
+    const tKey = titleKey(row);
+    const pKey = pillKey(row);
+    const noteKey = Object.keys(row).find(k=>/note|tip|description|detail/i.test(k));
+    const title = row[tKey] || "Untitled";
+    const pill  = pKey && row[pKey] ? `<span class="pill ${sec.pill==='sun'?'sun':''}">${esc(row[pKey])}</span>` : "";
+    const dl = Object.entries(row)
+      .filter(([k,v]) => v && k!==tKey && k!==pKey && k!==noteKey)
+      .map(([k,v])=>`<dt>${esc(k)}</dt><dd>${smartValue(k,v)}</dd>`).join("");
+    const note = (noteKey && row[noteKey]) ? `<div class="note">${esc(row[noteKey])}</div>` : "";
+    return `<article class="card">
+      <div class="card-top"><h3 class="card-title">${esc(title)}</h3>${pill}</div>
+      ${dl?`<dl class="rows">${dl}</dl>`:""}${note}
+    </article>`;
+  }).join("");
+}
+
+function renderTimeline(rows, sec){
+  if(!rows.length) return emptyState(sec);
+  const keys = rows[0] ? Object.keys(rows[0]) : [];
+  const dK = keys.find(k=>/date|day/i.test(k)) || keys[0];
+  const tK = keys.find(k=>/time/i.test(k));
+  const aK = keys.find(k=>/activity|event|title|plan/i.test(k)) || keys[1] || keys[0];
+  const lK = keys.find(k=>/location|venue|place|address/i.test(k));
+  const nK = keys.find(k=>/note|detail|tip/i.test(k));
+
+  const groups = {};
+  rows.forEach(r=>{ const d = r[dK] || "Unscheduled"; (groups[d]=groups[d]||[]).push(r); });
+
+  return Object.entries(groups).map(([day, items])=>`
+    <div class="day">
+      <div class="day-label">${esc(day)}<span class="line"></span></div>
+      <div class="timeline">
+        ${items.map(r=>`
+          <div class="stop">
+            ${tK&&r[tK]?`<div class="time">${esc(r[tK])}</div>`:""}
+            <div class="act">${esc(r[aK]||"")}</div>
+            ${lK&&r[lK]?`<div class="loc">${smartValue(lK,r[lK])}</div>`:""}
+            ${nK&&r[nK]?`<div class="sn">${esc(r[nK])}</div>`:""}
+          </div>`).join("")}
+      </div>
+    </div>`).join("");
+}
+
+function emptyState(sec){
+  return `<div class="state">No ${sec.label.toLowerCase()} added yet. Add a row in the “${esc(sec.tab)}” tab and refresh.</div>`;
+}
+
+async function loadSection(sec){
+  const el = document.getElementById("sec-body-"+sec.id);
+  try{
+    const res = await fetch(gvizURL(sec.tab));
+    const text = await res.text();
+    if(!res.ok){
+      throw new Error(`HTTP ${res.status} from Google — usually a sharing/permission issue, not a missing tab.`);
+    }
+    if(!/setResponse/.test(text)){
+      throw new Error(`Google didn’t return sheet data (got a login/error page instead). The sheet link likely isn’t shared as “Anyone with the link — Viewer”.`);
+    }
+    const { rows } = parseGviz(text);
+    el.innerHTML = sec.render==="timeline" ? renderTimeline(rows, sec) : renderCards(rows, sec);
+    const cnt = document.getElementById("count-"+sec.id);
+    if(cnt) cnt.textContent = rows.length ? `${rows.length} item${rows.length>1?"s":""}` : "";
+    return true;
+  }catch(err){
+    // TypeError with no HTTP status = the request never reached Google at all —
+    // almost always means the page is opened as a local file:// link instead of hosted.
+    const isNetworkBlock = err instanceof TypeError;
+    const msg = isNetworkBlock
+      ? `Couldn’t reach Google Sheets at all. If you opened this file directly (file://) instead of a hosted link, your browser blocks the request — host the file (e.g. Netlify Drop) and reopen it from that URL.`
+      : err.message;
+    el.innerHTML = `<div class="state err"><strong>“${esc(sec.tab)}” failed to load.</strong><br>${esc(msg)}</div>`;
+    return false;
+  }
+}
+
+function boot(){
+  // nav
+  document.getElementById("nav").innerHTML =
+    SECTIONS.map(s=>`<a href="#${s.id}">${s.icon} ${s.label}</a>`).join("");
+  // section shells
+  document.getElementById("app").innerHTML = SECTIONS.map(s=>`
+    <section id="${s.id}">
+      <div class="sec-head">
+        <span class="sec-icon">${s.icon}</span>
+        <h2>${s.label}</h2>
+        <span class="count" id="count-${s.id}"></span>
+      </div>
+      <div id="sec-body-${s.id}"><div class="skeleton"></div><div class="skeleton"></div></div>
+    </section>`).join("");
+  // load all
+  Promise.all(SECTIONS.map(loadSection)).then(()=>{
+    document.getElementById("updated").textContent =
+      "Updated " + new Date().toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});
+  });
+}
+boot();
+</script>
+</body>
+</html>
