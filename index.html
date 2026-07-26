@@ -49,6 +49,20 @@
     -webkit-font-smoothing:antialiased;
   }
 
+  /* ---------- Page watermark: Merlion, fixed behind all content ---------- */
+  .page-watermark{
+    position:fixed;inset:0;z-index:-1;
+    background-image:url('https://images.unsplash.com/photo-1687174885221-80ad758544a7?auto=format&fit=crop&w=1400&q=70');
+    background-repeat:no-repeat;
+    background-position:center 62%;
+    background-size:min(640px, 88vw) auto;
+    opacity:.3;
+    pointer-events:none;
+  }
+  @media (min-width:640px){
+    .page-watermark{background-size:520px auto;background-position:center 55%}
+  }
+
   /* ---------- Header: Gardens by the Bay at dusk ---------- */
   .hero{
     position:relative;overflow:hidden;
@@ -191,6 +205,8 @@
 </head>
 <body>
 
+<div class="page-watermark" aria-hidden="true"></div>
+
 <header class="hero">
   <div class="hero-bg"></div>
   <div class="hero-content">
@@ -218,6 +234,7 @@
 <footer>
   Content updates automatically from the shared Google Sheet.
   <br>To edit, open the sheet on your phone and change any cell or add a row.
+  <br>Background photo: Filipe Freitas / <a href="https://unsplash.com/photos/bKcsYg027j0" target="_blank" rel="noopener">Unsplash</a>
 </footer>
 
 <script>
@@ -342,7 +359,18 @@ function smartValue(key, val){
   if(/^https?:\/\//i.test(v)) return `<a href="${esc(v)}" target="_blank" rel="noopener">Open link</a>`;
   if(/phone|contact|tel/i.test(key) && /[0-9]{5,}/.test(v))
     return `<a href="tel:${esc(v.replace(/[^\d+]/g,''))}">${esc(v)}</a>`;
-  if(/address|venue|location|hotel|from.?to|from|to/i.test(key) && v.length > 3 && !/^https?:/i.test(v))
+  // Venue/location/hotel names are often short and generic (e.g. "Oceanarium"),
+  // which Google Maps can match to a same-named place in another country.
+  // Since every venue in this trip is actually in Singapore, bias the search
+  // query accordingly (unless it's already specific) — the visible link text
+  // is unchanged, only the hidden search gets more precise.
+  if(/address|venue|location|hotel/i.test(key) && v.length > 3){
+    const q = /singapore/i.test(v) ? v : `${v}, Singapore`;
+    return `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}" target="_blank" rel="noopener">${esc(v)}</a>`;
+  }
+  // Flight From/To are airport codes spanning two different countries —
+  // don't bias these toward Singapore, just search the code as-is.
+  if(/from.?to|^from$|^to$/i.test(key) && v.length > 1)
     return `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v)}" target="_blank" rel="noopener">${esc(v)}</a>`;
   return esc(v);
 }
