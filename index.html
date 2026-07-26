@@ -85,6 +85,536 @@
   /* Real photo layer: Gardens by the Bay at dusk. */
   .hero-photo{
     position:absolute;inset:0;z-index:0;
+    background:url('https://images.unsplash.com/photo-1775306963755-8897be3967bb?auto=format&fit=crop&w=1600&q=72') center 68%/cover no-repeat;
+  }
+  /* Duotone + legibility wash: pushes the photo into the site's petrol/jade
+     palette and darkens the lower-left so the headline stays readable. */
+  .hero-wash{
+    position:absolute;inset:0;z-index:1;
+    background:
+      linear-gradient(105deg, rgba(8,59,51,.94) 0%, rgba(8,59,51,.72) 38%, rgba(8,59,51,.30) 70%, rgba(8,59,51,.15) 100%),
+      linear-gradient(0deg, var(--petrol) 0%, rgba(8,59,51,.10) 42%, transparent 70%);
+  }
+  /* Jade tone-map over the photo's own colors so it never clashes. */
+  .hero-tone{position:absolute;inset:0;z-index:1;background:var(--jade);mix-blend-mode:color;opacity:.28}
+  .hero-credit{
+    position:absolute;right:11px;bottom:8px;z-index:3;
+    font-size:10px;color:rgba(234,245,240,.6);
+  }
+  .hero-credit a{color:inherit;text-decoration:none}
+  .hero-inner{position:relative;z-index:2;max-width:var(--maxw);margin:0 auto;width:100%}
+  .kicker{
+    display:inline-flex;align-items:center;gap:7px;
+    font-size:11px;letter-spacing:.18em;text-transform:uppercase;font-weight:600;
+    color:var(--jade-bright);margin:0 0 14px;
+  }
+  .kicker::before{content:"";width:16px;height:1.5px;background:var(--jade-bright)}
+  .hero h1{
+    margin:0;font-family:'Fraunces',Georgia,serif;font-weight:500;
+    font-size:clamp(30px,7vw,42px);line-height:1.08;letter-spacing:-.015em;color:#fff;
+    text-shadow:0 2px 24px rgba(0,0,0,.4);
+  }
+  .hero h1 em{font-style:italic;color:var(--jade-bright)}
+  .hero .sub{margin:14px 0 0;color:#d3e5dd;font-size:15px;max-width:44ch;text-shadow:0 1px 14px rgba(0,0,0,.35)}
+
+  /* trip meta strip */
+  .trip-meta{
+    display:flex;flex-wrap:wrap;gap:8px 22px;margin:22px 0 4px;
+    font-size:13px;color:#bcd8ce;
+  }
+  .trip-meta b{color:#eaf5f0;font-weight:600}
+  .updated{margin:18px 0 0;font-size:12px;color:#96bdb0;display:flex;align-items:center;gap:7px}
+  .updated .dot{width:6px;height:6px;border-radius:50%;background:var(--jade-bright);box-shadow:0 0 0 3px rgba(95,214,180,.2)}
+
+  /* ---------- Sticky control bar (tabs + legend) ---------- */
+  .bar{
+    position:sticky;top:0;z-index:30;
+    background:rgba(243,239,230,.9);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .bar-inner{max-width:var(--maxw);margin:0 auto}
+  nav{
+    display:flex;gap:7px;overflow-x:auto;padding:12px 16px 12px;
+    scrollbar-width:none;
+  }
+  nav::-webkit-scrollbar{display:none}
+  nav button{
+    flex:0 0 auto;font:inherit;cursor:pointer;
+    display:inline-flex;align-items:center;gap:7px;
+    font-size:13.5px;font-weight:600;
+    color:var(--ink-soft);background:transparent;border:1px solid transparent;
+    padding:8px 14px;border-radius:11px;white-space:nowrap;
+    transition:background .18s,color .18s,box-shadow .18s;
+  }
+  nav button .ic{font-size:15px;line-height:1}
+  nav button:hover{background:var(--line-soft)}
+  nav button.active{
+    background:var(--petrol);color:#fff;box-shadow:var(--shadow-sm);
+  }
+  nav button:focus-visible{outline:2px solid var(--jade);outline-offset:2px}
+
+  .legend{
+    display:flex;gap:16px;flex-wrap:wrap;
+    padding:0 18px 11px;font-size:11.5px;color:var(--ink-soft);
+  }
+  .legend span{display:inline-flex;align-items:center;gap:6px;font-weight:500}
+  .legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .legend .i-done{background:var(--done)}
+  .legend .i-next{background:var(--next)}
+  .legend .i-later{background:var(--later)}
+
+  /* ---------- Layout ---------- */
+  main{max-width:var(--maxw);margin:0 auto;padding:26px 16px 30px}
+  .panel{display:none;animation:fade .3s ease}
+  .panel.is-active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  .sec-head{display:flex;align-items:center;gap:11px;margin:0 2px 18px}
+  .sec-head .sec-icon{
+    width:36px;height:36px;flex:0 0 auto;border-radius:10px;
+    background:var(--jade-soft);color:var(--jade);
+    display:grid;place-items:center;font-size:18px;
+  }
+  .sec-head h2{margin:0;font-family:'Fraunces',Georgia,serif;font-size:23px;font-weight:600;letter-spacing:-.01em}
+  .sec-head .count{margin-left:auto;font-size:12px;color:var(--mist);font-weight:500}
+
+  /* ---------- Status pill ---------- */
+  .pill{
+    font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    padding:4px 9px;border-radius:999px;white-space:nowrap;
+  }
+  .pill.st-done{background:var(--done-soft);color:var(--done)}
+  .pill.st-next{background:var(--next-soft);color:var(--next)}
+  .pill.st-later{background:var(--later-soft);color:var(--later)}
+
+  /* ---------- Cards ---------- */
+  .card{
+    position:relative;background:var(--card);
+    border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow-sm);padding:17px 18px 15px;margin-bottom:13px;
+    transition:box-shadow .2s,transform .2s;
+  }
+  .card:hover{box-shadow:var(--shadow);transform:translateY(-1px)}
+  .card::before{
+    content:"";position:absolute;left:0;top:16px;bottom:16px;width:3px;border-radius:3px;
+    background:var(--line);
+  }
+  .card.st-done::before{background:var(--done)}
+  .card.st-next::before{background:var(--next)}
+  .card.st-later::before{background:var(--later)}
+  .card.st-done{opacity:.72}
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .card-title{font-size:16.5px;font-weight:600;margin:0;letter-spacing:-.01em;color:var(--ink)}
+  .rows{margin-top:13px;display:grid;grid-template-columns:auto 1fr;gap:8px 16px}
+  .rows dt{font-size:11px;color:var(--mist);font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding-top:2px}
+  .rows dd{margin:0;font-size:14px;color:var(--ink);word-break:break-word}
+  .rows dd a{color:var(--jade);font-weight:600;text-decoration:none;border-bottom:1px solid var(--jade-soft)}
+  .rows dd a:hover{border-bottom-color:var(--jade)}
+  .note{margin-top:13px;padding-top:12px;border-top:1px dashed var(--line);font-size:13px;color:var(--ink-soft)}
+
+  /* ---------- Itinerary timeline ---------- */
+  .day{margin-bottom:22px}
+  .day-label{
+    display:flex;align-items:center;gap:10px;margin:0 2px 12px;
+    font-size:13px;font-weight:700;color:var(--ink);letter-spacing:.01em;
+  }
+  .day-label .cal{
+    font-family:'Fraunces',serif;font-size:12px;font-weight:600;color:var(--jade);
+    background:var(--jade-soft);padding:3px 9px;border-radius:7px;
+  }
+  .day-label .line{flex:1;height:1px;background:var(--line)}
+  .timeline{position:relative;padding-left:24px}
+  .timeline::before{content:"";position:absolute;left:6px;top:8px;bottom:8px;width:2px;background:var(--line)}
+  .stop{position:relative;margin-bottom:15px}
+  .stop::before{
+    content:"";position:absolute;left:-22px;top:5px;width:10px;height:10px;border-radius:50%;
+    background:var(--card);border:2.5px solid var(--later);
+  }
+  .stop.st-done::before{border-color:var(--done);background:var(--done)}
+  .stop.st-next::before{border-color:var(--next);background:var(--next);box-shadow:0 0 0 4px var(--next-soft)}
+  .stop.st-later::before{border-color:var(--later)}
+  .stop.st-done{opacity:.62}
+  .stop .time{font-size:11.5px;font-weight:700;color:var(--jade);letter-spacing:.02em}
+  .stop .act{font-size:15px;font-weight:600;margin:2px 0;color:var(--ink)}
+  .stop .loc{font-size:13px;color:var(--ink-soft)}
+  .stop .loc a{color:var(--jade);text-decoration:none;border-bottom:1px solid var(--jade-soft)}
+  .stop .sn{font-size:13px;color:var(--mist);margin-top:3px}
+
+  /* ---------- States ---------- */
+  .state{
+    text-align:center;padding:40px 20px;color:var(--mist);font-size:14px;
+    background:var(--card);border:1px dashed var(--line);border-radius:var(--radius);
+  }
+  .state.err{color:var(--next);border-color:var(--next-soft);background:var(--next-soft)}
+  .state strong{color:var(--ink);display:block;margin-bottom:4px}
+  .skeleton{height:96px;border-radius:var(--radius);
+    background:linear-gradient(90deg,#eee9dd 25%,#f6f2ea 37%,#eee9dd 63%);
+    background-size:400% 100%;animation:sh 1.3s ease infinite;margin-bottom:13px;border:1px solid var(--line)}
+  @keyframes sh{0%{background-position:100% 0}100%{background-position:-100% 0}}
+
+  /* ---------- Footer ---------- */
+  footer{
+    max-width:var(--maxw);margin:0 auto;padding:22px 20px 40px;
+    color:var(--mist);font-size:12px;text-align:center;line-height:1.8;
+  }
+  footer a{color:var(--jade);text-decoration:none}
+  footer .foot-brand{
+    font-family:'Fraunces',serif;font-size:14px;color:var(--ink-soft);margin-bottom:6px;
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;scroll-behavior:auto;transition:none!important}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-photo"></div>
+  <div class="hero-tone"></div>
+  <div class="hero-wash"></div>
+  <div class="hero-inner">
+    <p class="kicker">Family Trip Hub</p>
+    <h1>Singapore<br><em>2026</em></h1>
+    <p class="sub">Every ticket, stay, plan and booking — in one place, always up to date. Tap a section to explore.</p>
+    <div class="trip-meta">
+      <span>📅 <b>14–20 Aug 2026</b></span>
+      <span>✈️ <b>BLR → SIN</b></span>
+      <span>👥 <b>Family of 3</b></span>
+    </div>
+    <p class="updated"><span class="dot"></span><span id="updated">Loading latest…</span></p>
+  </div>
+  <span class="hero-credit">Photo: Jayjayli / <a href="https://unsplash.com/photos/WhXZIQEYfF4" target="_blank" rel="noopener">Unsplash</a></span>
+</header>
+<div class="tile-band" aria-hidden="true"></div>
+
+<div class="bar">
+  <div class="bar-inner">
+    <nav id="nav" aria-label="Trip sections"></nav>
+    <div class="legend" aria-hidden="true">
+      <span><i class="i-done"></i>Done</span>
+      <span><i class="i-next"></i>Up next</span>
+      <span><i class="i-later"></i>Later</span>
+    </div>
+  </div>
+</div>
+
+<main id="app">
+  <div class="state" id="boot">Fetching the latest trip details…</div>
+</main>
+
+<div class="tile-band" aria-hidden="true"></div>
+<footer>
+  <div class="foot-brand">Singapore 2026</div>
+  Updates automatically from the shared Google Sheet.<br>
+  To edit, open the sheet on your phone and change any cell or add a row.
+</footer>
+
+<script>
+/* =============================================================
+   CONFIG  —  edit here only if you rename tabs in the Sheet
+   dated: "single" -> one date(+time) column drives status
+          "range"  -> check-in/check-out columns drive status
+          "none"   -> no status coloring (plain reference info)
+   ============================================================= */
+const SHEET_ID = "14g3BlnqTN7z8lzcNlmtB9sPPDRKIY238NoLpiT8pels";
+
+const SECTIONS = [
+  { id:"tickets",   label:"Tickets",    tab:"Tickets",    icon:"🎫", dated:"single" },
+  { id:"hotels",    label:"Hotels",     tab:"Hotels",     icon:"🏨", dated:"range"  },
+  { id:"itinerary", label:"Itinerary",  tab:"Itinerary",  icon:"🗺️", render:"timeline", dated:"single" },
+  { id:"bookings",  label:"Bookings",   tab:"Bookings",   icon:"🎟️", dated:"single" },
+  { id:"events",    label:"Event info", tab:"Event Info", icon:"📍", dated:"none"   },
+];
+/* ===================== end config ===================== */
+
+const NOW = new Date();
+
+const gvizURL = tab =>
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}`;
+
+// ---------- gviz parsing ----------
+function parseGviz(text){
+  const start = text.indexOf("{");
+  const end   = text.lastIndexOf("}");
+  const json  = JSON.parse(text.slice(start, end + 1));
+  if(!json.table) return { headers:[], rows:[] };
+  const cols = json.table.cols.map((c,i)=> (c.label && c.label.trim()) ? c.label.trim() : `Col${i+1}`);
+  const rows = (json.table.rows||[]).map(r=>{
+    const o = {};
+    (r.c||[]).forEach((cell,i)=>{
+      let v = cell ? (cell.f != null ? cell.f : cell.v) : "";
+      o[cols[i]] = (v==null) ? "" : String(v).trim();
+    });
+    return o;
+  }).filter(o => Object.values(o).some(v => v !== ""));
+  return { headers:cols, rows };
+}
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// ---------- date / time parsing ----------
+function parseDateLoose(s){
+  if(!s) return null;
+  s = String(s).trim();
+  let d = new Date(s);
+  if(!isNaN(d)) return d;
+  const m = s.match(/^(\d{1,2})[\s\-\/]([A-Za-z]{3,9})[\s\-\/](\d{4})$/);
+  if(m){
+    d = new Date(`${m[2]} ${m[1]}, ${m[3]}`);
+    if(!isNaN(d)) return d;
+  }
+  return null;
+}
+function parseTimeLoose(s){
+  if(!s) return null;
+  const m = String(s).trim().match(/^(\d{1,2}):(\d{2})\s*([AaPp][Mm])?$/);
+  if(!m) return null;
+  let h = parseInt(m[1],10), min = parseInt(m[2],10);
+  const ap = m[3] ? m[3].toLowerCase() : null;
+  if(ap==="pm" && h<12) h+=12;
+  if(ap==="am" && h===12) h=0;
+  return {h,min};
+}
+function combineDateTime(dateStr, timeStr){
+  const d = parseDateLoose(dateStr);
+  if(!d) return null;
+  const t = parseTimeLoose(timeStr);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), t?t.h:0, t?t.min:0, 0, 0);
+}
+
+// ---------- status engine ----------
+// Single-date items: done (past) / next (nearest upcoming) / later (rest).
+function computeLinearStatuses(items){ // items: [{dt: Date|null}]
+  const future = items.filter(i=>i.dt && i.dt.getTime() >= NOW.getTime());
+  const nextTime = future.length ? Math.min(...future.map(i=>i.dt.getTime())) : null;
+  return items.map(i=>{
+    if(!i.dt) return null;
+    if(i.dt.getTime() < NOW.getTime()) return "done";
+    if(i.dt.getTime() === nextTime) return "next";
+    return "later";
+  });
+}
+// Range items (hotel stays): done (checked out) / current (staying now, styled as next) / next (nearest future) / later.
+function computeRangeStatuses(items){ // items: [{start:Date|null, end:Date|null}]
+  const raw = items.map(i=>{
+    if(!i.start) return "unknown";
+    if(i.end && i.end.getTime() < NOW.getTime()) return "done";
+    if(i.start.getTime() <= NOW.getTime() && (!i.end || NOW.getTime() <= i.end.getTime())) return "current";
+    return "future";
+  });
+  const futureIdx = raw.map((s,idx)=>({s,idx})).filter(x=>x.s==="future");
+  let nextIdx = null;
+  if(futureIdx.length){
+    let best = futureIdx[0];
+    futureIdx.forEach(x=>{ if(items[x.idx].start.getTime() < items[best.idx].start.getTime()) best = x; });
+    nextIdx = best.idx;
+  }
+  return raw.map((s,idx)=>{
+    if(s==="unknown") return null;
+    if(s==="done") return "done";
+    if(s==="current") return "next";      // reuse "next" styling for "happening now"
+    if(idx===nextIdx) return "next";
+    return "later";
+  });
+}
+const STATUS_LABEL = { done:"Done", next:"Up next", later:"Later" };
+
+function statusPill(status, overrideLabel){
+  if(!status) return "";
+  const label = overrideLabel || STATUS_LABEL[status];
+  return `<span class="pill st-${status}">${esc(label)}</span>`;
+}
+
+// ---------- field detection ----------
+function smartValue(key, val){
+  const v = String(val);
+  if(/^https?:\/\//i.test(v)) return `<a href="${esc(v)}" target="_blank" rel="noopener">Open link</a>`;
+  if(/phone|contact|tel/i.test(key) && /[0-9]{5,}/.test(v))
+    return `<a href="tel:${esc(v.replace(/[^\d+]/g,''))}">${esc(v)}</a>`;
+  // Venue/location/hotel names are often short and generic (e.g. "Oceanarium"),
+  // which Google Maps can match to a same-named place in another country.
+  // Since every venue in this trip is actually in Singapore, bias the search
+  // query accordingly (unless it's already specific) — the visible link text
+  // is unchanged, only the hidden search gets more precise.
+  if(/address|venue|location|hotel/i.test(key) && v.length > 3){
+    const q = /singapore/i.test(v) ? v : `${v}, Singapore`;
+    return `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}" target="_blank" rel="noopener">${esc(v)}</a>`;
+  }
+  // Flight From/To are airport codes spanning two different countries —
+  // don't bias these toward Singapore, just search the code as-is.
+  if(/from.?to|^from$|^to$/i.test(key) && v.length > 1)
+    return `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v)}" target="_blank" rel="noopener">${esc(v)}</a>`;
+  return esc(v);
+}
+function titleKey(row){
+  const keys = Object.keys(row);
+  return keys.find(k=>/name|event|activity|type|provider|title/i.test(k)) || keys[0];
+}
+function dateKey(row){ return Object.keys(row).find(k=>/^date$/i.test(k)) || Object.keys(row).find(k=>/date/i.test(k)); }
+function timeKey(row){ return Object.keys(row).find(k=>/time/i.test(k)); }
+function checkinKey(row){ return Object.keys(row).find(k=>/check.?in/i.test(k)); }
+function checkoutKey(row){ return Object.keys(row).find(k=>/check.?out/i.test(k)); }
+
+function emptyState(sec){
+  return `<div class="state">No ${sec.label.toLowerCase()} added yet. Add a row in the "${esc(sec.tab)}" tab and refresh.</div>`;
+}
+
+// ---------- renderers ----------
+function renderCards(rows, sec){
+  if(!rows.length) return emptyState(sec);
+
+  let statuses = rows.map(()=>null);
+  if(sec.dated==="single"){
+    const items = rows.map(r=>({ dt: combineDateTime(dateKey(r)&&r[dateKey(r)], timeKey(r)&&r[timeKey(r)]) }));
+    statuses = computeLinearStatuses(items);
+  } else if(sec.dated==="range"){
+    const items = rows.map(r=>({
+      start: parseDateLoose(checkinKey(r) && r[checkinKey(r)]),
+      end:   parseDateLoose(checkoutKey(r) && r[checkoutKey(r)]),
+    }));
+    statuses = computeRangeStatuses(items);
+  }
+
+  return rows.map((row, i)=>{
+    const tKey = titleKey(row);
+    const noteKey = Object.keys(row).find(k=>/note|tip|description|detail/i.test(k));
+    const title = row[tKey] || "Untitled";
+    const status = statuses[i];
+    const overrideLabel = (sec.dated==="range" && status==="next" && checkinKey(row) &&
+      parseDateLoose(row[checkinKey(row)]) && parseDateLoose(row[checkinKey(row)]).getTime() <= NOW.getTime())
+      ? "Staying now" : null;
+    const pill = statusPill(status, overrideLabel);
+    const dl = Object.entries(row)
+      .filter(([k,v]) => v && k!==tKey && k!==noteKey)
+      .map(([k,v])=>`<dt>${esc(k)}</dt><dd>${smartValue(k,v)}</dd>`).join("");
+    const note = (noteKey && row[noteKey]) ? `<div class="note">${esc(row[noteKey])}</div>` : "";
+    return `<article class="card ${status?'st-'+status:''}">
+      <div class="card-top"><h3 class="card-title">${esc(title)}</h3>${pill}</div>
+      ${dl?`<dl class="rows">${dl}</dl>`:""}${note}
+    </article>`;
+  }).join("");
+}
+
+function renderTimeline(rows, sec){
+  if(!rows.length) return emptyState(sec);
+  const keys = rows[0] ? Object.keys(rows[0]) : [];
+  const dK = keys.find(k=>/date|day/i.test(k)) || keys[0];
+  const tK = keys.find(k=>/time/i.test(k));
+  const aK = keys.find(k=>/activity|event|title|plan/i.test(k)) || keys[1] || keys[0];
+  const lK = keys.find(k=>/location|venue|place|address/i.test(k));
+  const nK = keys.find(k=>/note|detail|tip/i.test(k));
+
+  // status is computed across the FULL flattened list, so "Up next" is the
+  // one genuinely next thing on the whole trip, not per-day.
+  const dtList = rows.map(r => ({ dt: combineDateTime(r[dK], tK && r[tK]) }));
+  const statuses = computeLinearStatuses(dtList);
+
+  const groups = {}; // day label -> [{row, status}]
+  rows.forEach((r,i)=>{
+    const d = r[dK] || "Unscheduled";
+    (groups[d]=groups[d]||[]).push({ row:r, status: statuses[i] });
+  });
+
+  return Object.entries(groups).map(([day, items])=>{
+    // day-level badge = the "best" status present that day (next > later > done)
+    const order = { next:0, later:1, done:2 };
+    const dayStatus = items.map(i=>i.status).filter(Boolean)
+      .sort((a,b)=>order[a]-order[b])[0];
+    const dayPill = dayStatus ? statusPill(dayStatus) : "";
+    return `
+    <div class="day">
+      <div class="day-label">${esc(day)}<span class="line"></span>${dayPill}</div>
+      <div class="timeline">
+        ${items.map(({row:r, status})=>`
+          <div class="stop ${status?'st-'+status:''}">
+            ${tK&&r[tK]?`<div class="time">${esc(r[tK])}</div>`:""}
+            <div class="act">${esc(r[aK]||"")}</div>
+            ${lK&&r[lK]?`<div class="loc">${smartValue(lK,r[lK])}</div>`:""}
+            ${nK&&r[nK]?`<div class="sn">${esc(r[nK])}</div>`:""}
+          </div>`).join("")}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// ---------- data loading ----------
+async function loadSection(sec){
+  const el = document.getElementById("sec-body-"+sec.id);
+  try{
+    const res = await fetch(gvizURL(sec.tab));
+    const text = await res.text();
+    if(!res.ok) throw new Error(`HTTP ${res.status} from Google — usually a sharing/permission issue, not a missing tab.`);
+    if(!/setResponse/.test(text)) throw new Error(`Google didn't return sheet data (got a login/error page instead). Check the sheet is shared as "Anyone with the link — Viewer".`);
+    const { rows } = parseGviz(text);
+    el.innerHTML = sec.render==="timeline" ? renderTimeline(rows, sec) : renderCards(rows, sec);
+    const cnt = document.getElementById("count-"+sec.id);
+    if(cnt) cnt.textContent = rows.length ? `${rows.length} item${rows.length>1?"s":""}` : "";
+    return true;
+  }catch(err){
+    const isNetworkBlock = err instanceof TypeError;
+    const msg = isNetworkBlock
+      ? `Couldn't reach Google Sheets at all. If you opened this file directly (file://) instead of a hosted link, your browser blocks the request — host the file (e.g. Netlify Drop) and reopen it from that URL.`
+      : err.message;
+    el.innerHTML = `<div class="state err"><strong>"${esc(sec.tab)}" failed to load.</strong><br>${esc(msg)}</div>`;
+    return false;
+  }
+}
+
+// ---------- tab switching ----------
+function activate(id){
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active", b.dataset.id===id));
+  document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("is-active", p.id===id));
+}
+
+function boot(){
+  document.getElementById("nav").innerHTML =
+    SECTIONS.map((s,i)=>`<button type="button" data-id="${s.id}" class="${i===0?'active':''}">${s.icon} ${s.label}</button>`).join("");
+  document.getElementById("nav").addEventListener("click", e=>{
+    const btn = e.target.closest("button[data-id]");
+    if(btn) activate(btn.dataset.id);
+  });
+
+  document.getElementById("app").innerHTML = SECTIONS.map((s,i)=>`
+    <section class="panel ${i===0?'is-active':''}" id="${s.id}">
+      <div class="sec-head">
+        <span class="sec-icon">${s.icon}</span>
+        <h2>${s.label}</h2>
+        <span class="count" id="count-${s.id}"></span>
+      </div>
+      <div id="sec-body-${s.id}"><div class="skeleton"></div><div class="skeleton"></div></div>
+    </section>`).join("");
+
+  Promise.all(SECTIONS.map(loadSection)).then(()=>{
+    document.getElementById("updated").textContent =
+      "Updated " + new Date().toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});
+  });
+}
+boot();
+</script>
+</body>
+</html>    background:
+      radial-gradient(circle at 50% 50%, var(--jade-bright) 0 3px, transparent 3.5px) 0 0/28px 28px,
+      radial-gradient(circle at 0% 0%, var(--jade) 0 3px, transparent 3.5px) 0 0/28px 28px,
+      radial-gradient(circle at 100% 0%, var(--jade) 0 3px, transparent 3.5px) 0 0/28px 28px,
+      radial-gradient(circle at 0% 100%, var(--jade) 0 3px, transparent 3.5px) 0 0/28px 28px,
+      radial-gradient(circle at 100% 100%, var(--jade) 0 3px, transparent 3.5px) 0 0/28px 28px,
+      var(--petrol-2);
+    opacity:.92;
+  }
+
+  /* ---------- Hero ---------- */
+  .hero{
+    position:relative;overflow:hidden;
+    background:var(--petrol);
+    color:#eaf5f0;
+    padding:40px 22px 34px;
+    min-height:340px;
+    display:flex;align-items:flex-end;
+  }
+  /* Real photo layer: Gardens by the Bay at dusk. */
+  .hero-photo{
+    position:absolute;inset:0;z-index:0;
     background:url('https://images.unsplash.com/photo-1775306963755-8897be3967bb?auto=format&fit=crop&w=1600&q=72') center 50%/cover no-repeat;
   }
   /* Duotone + legibility wash: pushes the photo into the site's petrol/jade
