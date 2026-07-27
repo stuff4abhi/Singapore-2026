@@ -356,12 +356,12 @@
   <div class="hero-wash"></div>
   <div class="hero-inner">
     <p class="kicker">Family Trip Hub</p>
-    <h1>Singapore<br><em>2026</em></h1>
+    <h1 id="heroTitle">Singapore<br><em id="heroYear">2026</em></h1>
     <p class="sub">Every ticket, stay, plan and booking — in one place, always up to date. Tap a section to explore.</p>
     <div class="trip-meta">
-      <span>📅 <b>14–20 Aug 2026</b></span>
+      <span id="metaDates">📅 <b>14–20 Aug 2026</b></span>
       <span>✈️ <b>BLR → SIN</b></span>
-      <span>👥 <b>Family of 3</b></span>
+      <span id="metaParty">👥 <b>Family of 3</b></span>
     </div>
     <p class="updated"><span class="dot"></span><span id="updated">Loading latest…</span></p>
   </div>
@@ -389,7 +389,7 @@
 
 <div class="tile-band" aria-hidden="true"></div>
 <footer>
-  <div class="foot-brand">Singapore 2026</div>
+  <div class="foot-brand" id="footBrand">Singapore 2026</div>
   Updates automatically from the shared Google Sheet.<br>
   To edit, open the sheet on your phone and change any cell or add a row.
 </footer>
@@ -465,6 +465,60 @@ function combineDateTime(dateStr, timeStr){
   if(!d) return null;
   const t = parseTimeLoose(timeStr);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), t?t.h:0, t?t.min:0, 0, 0);
+}
+
+// ---------- Trip Config loader ----------
+// Reads the "Trip Config" sheet and returns a key-value map: {tripName, dates, partySize, ...}
+async function loadTripConfig(){
+  try{
+    const res = await fetch(gvizURL("Trip Config"));
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const text = await res.text();
+    if(!/setResponse/.test(text)) throw new Error("No data from Trip Config sheet");
+    const { rows } = parseGviz(text);
+    const config = {};
+    rows.forEach(r=>{
+      const keys = Object.keys(r);
+      if(keys.length >= 2){
+        const k = r[keys[0]].trim().toLowerCase().replace(/\s+/g,"");
+        const v = r[keys[1]].trim();
+        config[k] = v;
+      }
+    });
+    return config;
+  }catch(err){
+    console.warn("Trip Config load failed:", err.message);
+    return {};
+  }
+}
+
+// Apply Trip Config values to the hero and footer.
+function applyTripConfig(config){
+  // config keys: "tripname", "dates", "partysize" (normalized from sheet)
+  const tripName = config.tripname || "Singapore";
+  const year = tripName.split(/\d{4}/).pop() || "2026";
+  const title = tripName.replace(year,"").trim();
+  const dates = config.dates || "14–20 Aug 2026";
+  const party = config.partysize || "Family of 3";
+  
+  // Update hero
+  const titleEl = document.getElementById("heroTitle");
+  if(titleEl){
+    titleEl.innerHTML = `${esc(title)}<br><em>${esc(year)}</em>`;
+  }
+  const datesEl = document.getElementById("metaDates");
+  if(datesEl){
+    datesEl.innerHTML = `📅 <b>${esc(dates)}</b>`;
+  }
+  const partyEl = document.getElementById("metaParty");
+  if(partyEl){
+    partyEl.innerHTML = `👥 <b>${esc(party)}</b>`;
+  }
+  // Update footer
+  const footEl = document.getElementById("footBrand");
+  if(footEl){
+    footEl.textContent = tripName;
+  }
 }
 
 // ---------- status engine ----------
@@ -845,7 +899,10 @@ function boot(){
       <div id="sec-body-${s.id}">${s.overview ? `<div class="skeleton"></div><div class="skeleton"></div>` : `<div class="skeleton"></div><div class="skeleton"></div>`}</div>
     </section>`).join("");
 
-  Promise.all(SECTIONS.map(loadSection)).then(()=>{
+  Promise.all([...SECTIONS.map(loadSection), loadTripConfig()]).then(async(results)=>{
+    // Last result is the Trip Config object
+    const tripConfig = results[results.length - 1] || {};
+    applyTripConfig(tripConfig);
     buildOverview();
     document.getElementById("updated").textContent =
       "Updated " + new Date().toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});
