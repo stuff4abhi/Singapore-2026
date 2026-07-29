@@ -440,7 +440,7 @@ const SECTIONS = [
 const NOW = new Date();
 
 const gvizURL = tab =>
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}`;
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}&headers=1`;
 
 // ---------- gviz parsing ----------
 function parseGviz(text){
@@ -448,8 +448,42 @@ function parseGviz(text){
   const end   = text.lastIndexOf("}");
   const json  = JSON.parse(text.slice(start, end + 1));
   if(!json.table) return { headers:[], rows:[] };
-  const cols = json.table.cols.map((c,i)=> (c.label && c.label.trim()) ? c.label.trim() : `Col${i+1}`);
-  const rows = (json.table.rows||[]).map(r=>{
+
+  const rawCols = json.table.cols.map(c => (c.label||"").trim());
+  const headersDetected = rawCols.some(l => l !== "");
+  let cols = rawCols.map((l,i)=> l || `Col${i+1}`);
+
+  const rawRows = json.table.rows || [];
+
+  // Safety net: when a sheet's first column looks numeric/blank to Google,
+  // gviz sometimes fails to detect headers at all (rawCols all empty). In
+  // that case row 1 of the DATA is actually the real header labels, and
+  // every row is shifted by one. Detect this by checking whether the first
+  // data row's cells look like short label-ish text with no row 2+ echoing
+  // the same values — the clearest signal is simply: if headers weren't
+  // detected AND every other row has a plausible value under it, treat the
+  // first row as the header row instead of guessing per-cell.
+  let rows;
+  if(!headersDetected && rawRows.length){
+    const firstRow = rawRows[0].c || [];
+    const looksLikeHeaderRow = firstRow.every(cell => {
+      const v = cell ? String(cell.v ?? "").trim() : "";
+      return v === "" || (v.length <= 30 && !/^\d+$/.test(v));
+    }) && firstRow.some(cell => cell && String(cell.v||"").trim() !== "");
+    if(looksLikeHeaderRow){
+      cols = firstRow.map((cell,i)=>{
+        const v = cell ? String(cell.v ?? "").trim() : "";
+        return v || `Col${i+1}`;
+      });
+      rows = rawRows.slice(1);
+    } else {
+      rows = rawRows;
+    }
+  } else {
+    rows = rawRows;
+  }
+
+  const parsed = rows.map(r=>{
     const o = {};
     (r.c||[]).forEach((cell,i)=>{
       let v = cell ? (cell.f != null ? cell.f : cell.v) : "";
@@ -457,7 +491,8 @@ function parseGviz(text){
     });
     return o;
   }).filter(o => Object.values(o).some(v => v !== ""));
-  return { headers:cols, rows };
+
+  return { headers:cols, rows:parsed };
 }
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
