@@ -177,6 +177,14 @@
     background:var(--petrol);color:#fff;box-shadow:var(--shadow-sm);
   }
   nav button:focus-visible{outline:2px solid var(--jade);outline-offset:2px}
+  .nav-group-label{
+    flex:0 0 auto;display:flex;align-items:center;gap:8px;
+    font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--mist);padding:0 2px 0 6px;align-self:stretch;
+  }
+  .nav-group-label::before{content:"";width:1px;align-self:center;height:18px;background:var(--line);margin-right:8px}
+  .nav-group-label:first-child::before{display:none}
+  .nav-group-label:first-child{padding-left:0}
 
   .legend{
     display:flex;gap:16px;flex-wrap:wrap;
@@ -293,6 +301,20 @@
   .rows dd a:hover{border-bottom-color:var(--jade)}
   .note{margin-top:13px;padding-top:12px;border-top:1px dashed var(--line);font-size:13px;color:var(--ink-soft)}
 
+  /* ---------- Reference list (Essentials) ---------- */
+  .ref-group{margin-bottom:20px}
+  .ref-group-label{
+    display:flex;align-items:center;gap:8px;margin:0 2px 9px;
+    font-size:13px;font-weight:700;color:var(--ink);letter-spacing:.01em;
+  }
+  .ref-group .card{padding:4px 18px}
+  .ref-row{padding:13px 0;border-bottom:1px solid var(--line-soft)}
+  .ref-row:last-child{border-bottom:0}
+  .ref-label{font-size:11px;color:var(--mist);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+  .ref-value{font-size:15.5px;font-weight:600;color:var(--ink);margin-top:2px}
+  .ref-value a{color:var(--jade);text-decoration:none;border-bottom:1px solid var(--jade-soft)}
+  .ref-note{font-size:13px;color:var(--ink-soft);margin-top:2px}
+
   /* ---------- Itinerary timeline ---------- */
   .day{margin-bottom:22px}
   .day-label{
@@ -400,15 +422,18 @@
    dated: "single" -> one date(+time) column drives status
           "range"  -> check-in/check-out columns drive status
           "none"   -> no status coloring (plain reference info)
+   group: which nav cluster this tab sits under (Plan/Do/Explore/Essentials)
    ============================================================= */
 const SHEET_ID = "14g3BlnqTN7z8lzcNlmtB9sPPDRKIY238NoLpiT8pels";
 
 const SECTIONS = [
-  { id:"tickets",   label:"Tickets",    tab:"Tickets",    icon:"🎫", dated:"single" },
-  { id:"hotels",    label:"Hotels",     tab:"Hotels",     icon:"🏨", dated:"range"  },
-  { id:"itinerary", label:"Itinerary",  tab:"Itinerary",  icon:"🗺️", render:"timeline", dated:"single" },
-  { id:"bookings",  label:"Bookings",   tab:"Bookings",   icon:"🎟️", dated:"single" },
-  { id:"events",    label:"Event info", tab:"Event Info", icon:"📍", dated:"none"   },
+  { id:"tickets",   label:"Flights",    tab:"Tickets",     icon:"✈️", dated:"single", group:"Plan"    },
+  { id:"hotels",    label:"Stays",      tab:"Hotels",      icon:"🏨", dated:"range",  group:"Plan"    },
+  { id:"itinerary", label:"Itinerary",  tab:"Itinerary",   icon:"🗺️", render:"timeline", dated:"single", group:"Do" },
+  { id:"bookings",  label:"Activities", tab:"Bookings",    icon:"🎟️", dated:"single", group:"Do"      },
+  { id:"food",      label:"Eat & Drink",tab:"Eat & Drink", icon:"🍜", dated:"single", group:"Explore" },
+  { id:"events",    label:"Event info", tab:"Event Info",  icon:"📍", dated:"none",   group:"Explore" },
+  { id:"essentials",label:"Essentials", tab:"Essentials",  icon:"🛟", dated:"none",   group:"Essentials", render:"reference" },
 ];
 /* ===================== end config ===================== */
 
@@ -570,6 +595,13 @@ function smartValue(key, val){
   if(/^https?:\/\//i.test(v)) return `<a href="${esc(v)}" target="_blank" rel="noopener">Open link</a>`;
   if(/phone|contact|tel/i.test(key) && /[0-9]{5,}/.test(v))
     return `<a href="tel:${esc(v.replace(/[^\d+]/g,''))}">${esc(v)}</a>`;
+  // Value looks like a phone number by shape alone (Essentials tab uses a
+  // generic "Value" column for embassy/hospital/hotel numbers, not "phone").
+  // Check total digit count rather than requiring consecutive digits, since
+  // real numbers are space/hyphen separated (e.g. "+65 6737 6809"). Also
+  // catch short emergency codes like "999" or "112".
+  if(/^[+]?[\d\s\-()]{3,}$/.test(v.trim()) && (v.match(/\d/g)||[]).length >= 3 && (v.match(/\d/g)||[]).length <= 15)
+    return `<a href="tel:${esc(v.replace(/[^\d+]/g,''))}">${esc(v)}</a>`;
   // Venue/location/hotel names are often short and generic (e.g. "Oceanarium"),
   // which Google Maps can match to a same-named place in another country.
   // Since every venue in this trip is actually in Singapore, bias the search
@@ -596,6 +628,43 @@ function checkoutKey(row){ return Object.keys(row).find(k=>/check.?out/i.test(k)
 
 function emptyState(sec){
   return `<div class="state">No ${sec.label.toLowerCase()} added yet. Add a row in the "${esc(sec.tab)}" tab and refresh.</div>`;
+}
+
+// Reference renderer: for lookup-style tabs like Essentials — grouped by
+// Category, no dates/status, values auto-linkified (phone/address/url).
+function renderReference(rows, sec){
+  if(!rows.length) return emptyState(sec);
+  const keys = Object.keys(rows[0]);
+  const catK = keys.find(k=>/category/i.test(k)) || keys[0];
+  const labK = keys.find(k=>/label/i.test(k)) || keys[1] || keys[0];
+  const valK = keys.find(k=>/value/i.test(k)) || keys[2] || keys[1];
+  const noteK = keys.find(k=>/note/i.test(k));
+
+  const CAT_ICON = {
+    emergency:"🚨", embassy:"🛂", hospital:"🏥", hotel:"🏨",
+    currency:"💱", plug:"🔌", transport:"🚕",
+  };
+  const groups = {};
+  rows.forEach(r=>{
+    const cat = (r[catK] || "Other").trim();
+    (groups[cat] = groups[cat] || []).push(r);
+  });
+
+  return Object.entries(groups).map(([cat, items])=>{
+    const icon = CAT_ICON[cat.toLowerCase()] || "📌";
+    return `
+    <div class="ref-group">
+      <div class="ref-group-label"><span>${icon}</span>${esc(cat)}</div>
+      <div class="card">
+        ${items.map(r=>`
+          <div class="ref-row">
+            <div class="ref-label">${esc(r[labK]||"")}</div>
+            <div class="ref-value">${smartValue(labK, r[valK]||"")}</div>
+            ${noteK && r[noteK] ? `<div class="ref-note">${esc(r[noteK])}</div>` : ""}
+          </div>`).join("")}
+      </div>
+    </div>`;
+  }).join("");
 }
 
 // ---------- renderers ----------
@@ -686,7 +755,9 @@ async function loadSection(sec){
     if(!/setResponse/.test(text)) throw new Error(`Google didn't return sheet data (got a login/error page instead). Check the sheet is shared as "Anyone with the link — Viewer".`);
     const { rows } = parseGviz(text);
     SECTION_DATA[sec.id] = rows;                       // cache for the Overview
-    el.innerHTML = sec.render==="timeline" ? renderTimeline(rows, sec) : renderCards(rows, sec);
+    el.innerHTML = sec.render==="timeline" ? renderTimeline(rows, sec)
+      : sec.render==="reference" ? renderReference(rows, sec)
+      : renderCards(rows, sec);
     const cnt = document.getElementById("count-"+sec.id);
     if(cnt) cnt.textContent = rows.length ? `${rows.length} item${rows.length>1?"s":""}` : "";
     return true;
@@ -874,11 +945,21 @@ function updateNavCues(){
 }
 
 function boot(){
-  // Overview is a virtual section (no sheet tab) shown first.
+  // Overview is a virtual section (no sheet tab) shown first, ungrouped.
   const NAV = [{ id:"overview", label:"Overview", icon:"✨", overview:true }, ...SECTIONS];
 
-  document.getElementById("nav").innerHTML =
-    NAV.map((s,i)=>`<button type="button" data-id="${s.id}" class="${i===0?'active':''}"><span class="ic">${s.icon}</span>${s.label}</button>`).join("");
+  // Build nav with a small group-label divider whenever the group changes,
+  // so the scrollable strip reads as clusters (Plan / Do / Explore / Essentials)
+  // rather than one flat run of buttons.
+  let lastGroup = null;
+  const navHTML = NAV.map((s,i)=>{
+    const divider = (s.group && s.group !== lastGroup)
+      ? `<span class="nav-group-label">${esc(s.group)}</span>` : "";
+    lastGroup = s.group || lastGroup;
+    return divider + `<button type="button" data-id="${s.id}" class="${i===0?'active':''}"><span class="ic">${s.icon}</span>${esc(s.label)}</button>`;
+  }).join("");
+
+  document.getElementById("nav").innerHTML = navHTML;
   document.getElementById("nav").addEventListener("click", e=>{
     const btn = e.target.closest("button[data-id]");
     if(btn) activate(btn.dataset.id);
