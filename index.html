@@ -625,7 +625,7 @@ function statusPill(status, overrideLabel){
 }
 
 // ---------- field detection ----------
-function smartValue(key, val){
+function smartValue(key, val, rowTitle){
   const v = String(val);
   if(/^https?:\/\//i.test(v)) return `<a href="${esc(v)}" target="_blank" rel="noopener">Open link</a>`;
   if(/phone|contact|tel/i.test(key) && /[0-9]{5,}/.test(v))
@@ -637,13 +637,18 @@ function smartValue(key, val){
   // catch short emergency codes like "999" or "112".
   if(/^[+]?[\d\s\-()]{3,}$/.test(v.trim()) && (v.match(/\d/g)||[]).length >= 3 && (v.match(/\d/g)||[]).length <= 15)
     return `<a href="tel:${esc(v.replace(/[^\d+]/g,''))}">${esc(v)}</a>`;
-  // Venue/location/hotel names are often short and generic (e.g. "Oceanarium"),
-  // which Google Maps can match to a same-named place in another country.
-  // Since every venue in this trip is actually in Singapore, bias the search
-  // query accordingly (unless it's already specific) — the visible link text
-  // is unchanged, only the hidden search gets more precise.
+  // Venue/location/hotel/address fields: build the strongest possible Maps
+  // query by combining the row's own title (e.g. restaurant/hotel name) +
+  // Singapore + the address itself, when a title is available — this beats
+  // searching the address alone, which can match a neighboring unit instead
+  // of the actual place. Falls back to the old value-only behavior when no
+  // title is passed in (e.g. Bookings/Itinerary cards without one apt field).
   if(/address|venue|location|hotel/i.test(key) && v.length > 3){
-    const q = /singapore/i.test(v) ? v : `${v}, Singapore`;
+    const parts = [];
+    if(rowTitle && !v.toLowerCase().includes(rowTitle.toLowerCase())) parts.push(rowTitle);
+    parts.push(v);
+    if(!/singapore/i.test(parts.join(" "))) parts.push("Singapore");
+    const q = parts.join(", ");
     return `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}" target="_blank" rel="noopener">${esc(v)}</a>`;
   }
   // Flight From/To are airport codes spanning two different countries —
@@ -729,7 +734,7 @@ function renderCards(rows, sec){
     const pill = statusPill(status, overrideLabel);
     const dl = Object.entries(row)
       .filter(([k,v]) => v && k!==tKey && k!==noteKey)
-      .map(([k,v])=>`<dt>${esc(k)}</dt><dd>${smartValue(k,v)}</dd>`).join("");
+      .map(([k,v])=>`<dt>${esc(k)}</dt><dd>${smartValue(k,v,title)}</dd>`).join("");
     const note = (noteKey && row[noteKey]) ? `<div class="note">${esc(row[noteKey])}</div>` : "";
     return `<article class="card ${status?'st-'+status:''}">
       <div class="card-top"><h3 class="card-title">${esc(title)}</h3>${pill}</div>
