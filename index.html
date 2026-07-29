@@ -92,6 +92,27 @@
     position:absolute;inset:0;width:100%;height:100%;
     object-fit:cover;object-position:center 35%;
   }
+  /* The source video is portrait (1080x1920). On a wide desktop hero,
+     stretching it edge-to-edge forces a hard zoom that crops out most of
+     the statue — leaving just the upper face. Past this breakpoint, cap
+     the video to its natural-ish aspect ratio and anchor it to the right,
+     so the full Merlion stays in frame; the petrol background (already
+     under it) fills the remaining left side instead of forcing a bad crop. */
+  @media (min-width:760px){
+    .hero-photo video{
+      left:auto;right:0;width:auto;height:100%;
+      max-width:60%;
+      object-position:center 15%;
+    }
+    /* Soften the seam between the video's left edge and the petrol backdrop.
+       This is scoped inside .hero-photo's own stacking context (z-index:0
+       on the parent), so it can never visually leak above the sibling
+       .hero-tone/.hero-wash layers regardless of this internal z-index. */
+    .hero-photo::after{
+      content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+      background:linear-gradient(90deg, var(--night) 0%, var(--night) 28%, transparent 55%);
+    }
+  }
   /* Duotone + legibility wash: pushes the photo into the site's petrol/jade
      palette and darkens the lower-left so the headline stays readable. */
   .hero-wash{
