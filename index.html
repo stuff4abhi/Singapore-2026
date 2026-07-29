@@ -28,6 +28,7 @@
     /* brand */
     --petrol:#083b33;         /* hero + deep accents */
     --petrol-2:#0c5045;
+    --night:#04211c;          /* hero video fallback while loading/if it fails */
     --jade:#128a6e;           /* primary accent */
     --jade-bright:#5fd6b4;    /* highlights on dark */
     --jade-soft:#e2f3ed;
@@ -107,11 +108,11 @@
   .hero-wash{
     position:absolute;inset:0;z-index:1;
     background:
-      linear-gradient(90deg, var(--petrol) 0%, rgba(8,59,51,.92) 28%, rgba(8,59,51,.55) 52%, rgba(8,59,51,.20) 80%, rgba(8,59,51,.25) 100%),
-      linear-gradient(0deg, rgba(8,59,51,.45) 0%, transparent 42%);
+      linear-gradient(90deg, rgba(8,59,51,.62) 0%, rgba(8,59,51,.45) 20%, rgba(8,59,51,.18) 42%, rgba(8,59,51,.05) 65%, transparent 100%),
+      linear-gradient(0deg, rgba(8,59,51,.35) 0%, transparent 38%);
   }
   /* Jade tone-map over the video's own colors so it never clashes. */
-  .hero-tone{position:absolute;inset:0;z-index:1;background:var(--jade);mix-blend-mode:color;opacity:.20}
+  .hero-tone{position:absolute;inset:0;z-index:1;background:var(--jade);mix-blend-mode:color;opacity:.10}
   .hero-credit{
     position:absolute;right:11px;bottom:8px;z-index:3;
     font-size:10px;color:rgba(234,245,240,.6);
