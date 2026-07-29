@@ -1,0 +1,189 @@
+# Singapore 2026 Trip Hub — Project Summary
+
+## What was built
+
+A fully functional, mobile-first **trip planning hub** for your Singapore 2026 family trip. Single static HTML file, live data from Google Sheets, zero backend/cost.
+
+---
+
+## Core features delivered
+
+### Overview tab
+- **Countdown** — auto-calculates days to go, current day number during trip, or "trip complete" after
+- **What's next** — the single nearest upcoming thing across all sections (flight, hotel, itinerary, booking)
+- **Today's plan** — only appears during the trip; lists that day's itinerary items by time
+- **Quick counts** — tiles showing 2 Tickets · 1 Hotels · 3 Itinerary items, etc., each tappable to jump to that section
+
+### Five data sections (all live from Google Sheet)
+- **Tickets** — flights with PNR, seat, status
+- **Hotels** — check-in/out, address, booking ref, phone tap-to-call
+- **Itinerary** — day-by-day timeline with time, activity, location (tap-to-maps), notes
+- **Bookings** — event name, date, confirmation number
+- **Event Info** — venue, timings, description, tips
+
+### Status system (auto-calculated)
+- **Done** (grey) — dates in the past
+- **Up Next** (amber) — the single nearest upcoming thing, highlighted with a glow
+- **Later** (teal) — everything else ahead
+- Applied to cards, timeline dots, and day badges
+
+### Navigation & discoverability
+- **Sticky tab bar** with smooth scrolling
+- **Scroll affordances** — right-edge fade + animated chevron when tabs overflow, auto-hides at the end
+- **Active tab auto-scrolls into view** — so if someone deep-links to "Event Info," it centers itself
+- **Legend** always visible — "Done · Up next · Later"
+
+### Trip Config (editable from Sheet)
+- Reads `Trip Config` tab with rows: "Trip name," "Dates," "Party size"
+- Updates hero heading, footer brand dynamically
+- Family edits these cells on their phone; no code required
+
+### Smart linking
+- **Phone numbers** — tap-to-call
+- **Addresses & venues** — tap-to-open Google Maps
+- **Automatic Singapore bias** — venue searches get ", Singapore" appended so "Oceanarium" finds the right one, not a different country
+
+### Design
+- **Hero image** — real Merlion at night photo (Jayjayli, Unsplash License)
+- **Color palette** — petrol ink + jade + warm porcelain; status colors (amber/jade/stone) are the *only* accents so "up next" pops
+- **Peranakan tile motif** — pure CSS ornamental band under hero and above footer, uniquely Singapore
+- **Typography** — Fraunces serif for headlines (botanical, intentional), Outfit sans for data (clean, readable)
+- **Mobile-first** — tested at 390px width; scales gracefully to desktop
+
+### Offline & performance
+- Data loads from Google Sheets via gviz API; graceful fallback if sheet fails
+- Optimized single-file design (no build step, no dependencies)
+- Fast on mobile networks
+
+---
+
+## How to use right now
+
+1. **Open the file:** `/mnt/user-data/outputs/index.html`
+2. **Host it:** Drag into [Netlify Drop](https://app.netlify.com/drop) or push to GitHub Pages — get one live link in seconds
+3. **Share the link** with your family
+4. **They edit the Sheet** (Tickets, Hotels, Itinerary, Bookings, Trip Config tabs) from their phones
+5. **Changes appear on the site** within seconds on next refresh
+
+No backend, no code editing, no API keys. One Google Sheet + one HTML file = shared trip hub.
+
+---
+
+## Upgrade plan (parked for later)
+
+Three phases proposed, each incrementally adding capability while maintaining the static-site + free model:
+
+### Phase 1 — Files with offline access
+- New `Files` sheet tab linking to PDFs in a shared Drive folder
+- Boarding passes, hotel vouchers, insurance docs — all accessible and searchable
+- **Offline pinning** via service worker so critical files (marked "Essential = Yes") work with zero signal
+
+### Phase 2 — "Around You Now" — contextual discovery
+- Uses free OpenStreetMap Overpass API + Wikipedia GeoSearch (no keys, no cost)
+- Finds your current/next itinerary location, surfaces nearby cafés, attractions, landmarks within a configurable radius
+- Optional live GPS mode (with permission prompt) so it keys off actual position
+- Caches results for offline use
+
+### Phase 3 — Shared Trip Journal via Google Form
+- Family writes notes, uploads photos via a native Google Form (mobile-friendly, Drive upload built-in)
+- Form responses auto-append to a `Journal` sheet tab the site reads
+- Site renders a warm, chronological feed of memories — author, note, timestamp, photo gallery
+- You can moderate by editing/deleting rows; everything stays in your Sheet
+
+### Foundation for all three: PWA + offline
+- Refactor single file into organized modules (config, cache, sheets, sections, etc.)
+- Add service worker + manifest so the hub is installable ("Add to Home Screen")
+- Implement localStorage caching so the site opens instantly and works offline
+- Show "Updated 2 min ago / offline — showing saved copy" timestamp so users trust what they see
+- Makes travel truly work — bad hotel wifi? App opens instantly and works anyway
+
+---
+
+## Architecture & structure
+
+**Current (Phase 0 — what's live now):**
+```
+index.html (single file, ~950 lines)
+├── inline CSS (design system)
+├── inline JavaScript
+└── inline HTML (markup shell)
+```
+
+**Recommended for scaling (if Phase 0 refactor is done):**
+```
+singapore-2026/
+├── index.html          ← markup shell only
+├── manifest.json       ← installable app metadata
+├── sw.js               ← service worker (offline + pinned files)
+├── css/styles.css      ← design system
+└── js/
+    ├── config.js       ← SHEET_ID, tab names, ONE place to configure
+    ├── cache.js        ← localStorage + freshness
+    ├── sheet.js        ← gviz fetch/parse (cache-aware)
+    ├── sections.js     ← renderers (tickets, hotels, etc.)
+    ├── overview.js     ← countdown/up-next/today
+    ├── files.js        ← Phase 1
+    ├── nearby.js       ← Phase 2
+    ├── journal.js      ← Phase 3
+    └── app.js          ← boot, nav, routing
+```
+
+---
+
+## Current risks & mitigations
+
+### Risk: Linking the Google Sheet directly in footer
+**The problem:** If you link the Sheet publicly, *all tabs become visible* — not just the Journal. Visitors see:
+- Flight PNRs, seat assignments
+- Hotel confirmation numbers
+- Full itinerary (dates, times, places)
+- Booking refs for attractions
+- Your Trip Config (family name, exact dates, party size)
+
+Anyone could screenshot the entire plan and know exactly where you are, when, with what confirmations.
+
+**Mitigation (recommended):** 
+- Keep the Sheet **private** (shared only with core organizers via email)
+- Link only the **Google Form** in the footer (➕ "Add a note or photo")
+- Users contribute via the Form (the intended flow), not by browsing the Sheet
+- Data stays secure; you moderate via the Sheet (which only you/organizers see)
+
+---
+
+## What's ready to deploy
+
+✅ One HTML file with all features  
+✅ Tested on mobile (390px) and desktop  
+✅ Data lives in your Google Sheet (you control it, no backend)  
+✅ Live refresh (family edits Sheet → site updates on next open)  
+✅ Graceful fallbacks (no spinners, no broken states)  
+✅ One shareable link gets everyone on the same page  
+
+---
+
+## Next steps
+
+**To go live immediately:**
+1. Copy `/mnt/user-data/outputs/index.html`
+2. Drag into [Netlify Drop](https://app.netlify.com/drop) → get a live URL in 10 seconds
+3. Share the link with your family
+4. They start editing the Google Sheet; you refresh the site to see changes
+
+**To add features later (parked plan):**
+- Choose which phase (Files / Around You / Journal) you want
+- I'll build it with the same static, free, no-backend approach
+- The full PWA refactor (Phase 0 foundation) should happen first if you want offline + fast performance
+
+---
+
+## File location
+
+- **Live site:** `/mnt/user-data/outputs/index.html`
+- **Google Sheet:** `https://docs.google.com/spreadsheets/d/14g3BlnqTN7z8lzcNlmtB9sPPDRKIY238NoLpiT8pels/`
+- **This summary:** `/mnt/user-data/outputs/claude.md`
+
+---
+
+**Built with:** pure HTML/CSS/JavaScript, zero dependencies, free Google APIs, designed by Claude (AI).  
+**License:** yours to keep, edit, deploy however you like.  
+**Cost to host:** free (Netlify Drop) or ~$0/month (GitHub Pages).
