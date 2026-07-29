@@ -85,7 +85,12 @@
   /* Real photo layer: Gardens by the Bay at dusk. */
   .hero-photo{
     position:absolute;inset:0;z-index:0;
-    background:url('https://images.unsplash.com/photo-1775306963755-8897be3967bb?auto=format&fit=crop&w=1600&q=72') center 35%/cover no-repeat;
+    overflow:hidden;
+    background-color:var(--night); /* fallback while video loads / if it fails */
+  }
+  .hero-photo video{
+    position:absolute;inset:0;width:100%;height:100%;
+    object-fit:cover;object-position:center 35%;
   }
   /* Duotone + legibility wash: pushes the photo into the site's petrol/jade
      palette and darkens the lower-left so the headline stays readable. */
@@ -95,7 +100,7 @@
       linear-gradient(105deg, rgba(8,59,51,.94) 0%, rgba(8,59,51,.72) 38%, rgba(8,59,51,.30) 70%, rgba(8,59,51,.15) 100%),
       linear-gradient(0deg, var(--petrol) 0%, rgba(8,59,51,.10) 42%, transparent 70%);
   }
-  /* Jade tone-map over the photo's own colors so it never clashes. */
+  /* Jade tone-map over the video's own colors so it never clashes. */
   .hero-tone{position:absolute;inset:0;z-index:1;background:var(--jade);mix-blend-mode:color;opacity:.28}
   .hero-credit{
     position:absolute;right:11px;bottom:8px;z-index:3;
@@ -373,7 +378,12 @@
 <body>
 
 <header class="hero">
-  <div class="hero-photo"></div>
+  <div class="hero-photo">
+    <video autoplay muted loop playsinline preload="metadata"
+           poster="https://images.pexels.com/videos/3502581/free-video-3502581.jpg?auto=compress&cs=tinysrgb&h=900&fit=crop&w=1200">
+      <source src="https://videos.pexels.com/video-files/3502581/3502581-hd_1080_1920_30fps.mp4" type="video/mp4">
+    </video>
+  </div>
   <div class="hero-tone"></div>
   <div class="hero-wash"></div>
   <div class="hero-inner">
@@ -387,7 +397,7 @@
     </div>
     <p class="updated"><span class="dot"></span><span id="updated">Loading latest…</span></p>
   </div>
-  <span class="hero-credit">Photo: Jayjayli / <a href="https://unsplash.com/photos/WhXZIQEYfF4" target="_blank" rel="noopener">Unsplash</a></span>
+  <span class="hero-credit">Video: Jaime Moreno / <a href="https://www.pexels.com/video/people-gathering-beside-the-lion-fountain-in-singapore-3502581/" target="_blank" rel="noopener">Pexels</a></span>
 </header>
 <div class="tile-band" aria-hidden="true"></div>
 
@@ -985,6 +995,16 @@ function updateNavCues(){
 }
 
 function boot(){
+  // Hero video: if autoplay is blocked (some mobile browsers) or the file
+  // fails to load, quietly fall back to the poster frame — never show a
+  // broken video box. The poster + background-color already cover this
+  // visually; this just retries play() once, which is enough for most cases.
+  const heroVid = document.querySelector(".hero-photo video");
+  if(heroVid){
+    heroVid.play().catch(()=>{ /* autoplay blocked — poster frame remains visible, which is fine */ });
+    heroVid.addEventListener("error", ()=>{ heroVid.style.display = "none"; }, {once:true});
+  }
+
   // Overview is a virtual section (no sheet tab) shown first, ungrouped.
   const NAV = [{ id:"overview", label:"Overview", icon:"✨", overview:true }, ...SECTIONS];
 
