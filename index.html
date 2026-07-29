@@ -74,10 +74,18 @@
   }
 
   /* ---------- Hero ---------- */
+  /* .hero is the full-bleed color backdrop (edge-to-edge on any monitor
+     width). .hero-grid is the actual content composition — on desktop it's
+     capped and centered like the rest of the site's content (main/nav
+     already cap at 660px), so the layout can't stretch into a huge dead
+     gap on ultra-wide screens. */
   .hero{
     position:relative;overflow:hidden;
     background:var(--petrol);
     color:#eaf5f0;
+  }
+  .hero-grid{
+    position:relative;
     padding:40px 22px 34px;
     min-height:340px;
     display:flex;align-items:flex-end;
@@ -92,25 +100,36 @@
     position:absolute;inset:0;width:100%;height:100%;
     object-fit:cover;object-position:center 35%;
   }
-  /* The source video is portrait (1080x1920). On a wide desktop hero,
-     stretching it edge-to-edge forces a hard zoom that crops out most of
-     the statue — leaving just the upper face. Past this breakpoint, cap
-     the video to its natural-ish aspect ratio and anchor it to the right,
-     so the full Merlion stays in frame; the petrol background (already
-     under it) fills the remaining left side instead of forcing a bad crop. */
-  @media (min-width:760px){
-    .hero-photo video{
-      left:auto;right:0;width:auto;height:100%;
-      max-width:60%;
-      object-position:center 15%;
+  /* Below ~900px, mobile/tablet keeps the simple full-bleed overlay — this
+     is the behavior that already works well on phones, left untouched.
+     At desktop widths, the hero stops being "text floating over a corner
+     video" and becomes a real two-column layout, itself capped to a
+     sensible max-width and centered — content on the left, a genuinely
+     substantial video panel on the right, sharing one row. */
+  @media (min-width:900px){
+    .hero-grid{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) minmax(320px, 42%);
+      align-items:stretch;
+      max-width:1180px;margin:0 auto;
+      padding:0;
+      min-height:400px;
     }
-    /* Soften the seam between the video's left edge and the petrol backdrop.
-       This is scoped inside .hero-photo's own stacking context (z-index:0
-       on the parent), so it can never visually leak above the sibling
-       .hero-tone/.hero-wash layers regardless of this internal z-index. */
+    .hero-photo{
+      position:relative;inset:auto;
+      grid-column:2;grid-row:1;
+      height:100%;
+    }
+    .hero-photo video{
+      position:relative;left:auto;right:auto;
+      width:100%;height:100%;max-width:none;
+      object-position:center 12%;
+    }
+    /* Seam: fades the video's left edge into the petrol column instead of
+       a hard cut, so the two panels read as one composed hero. */
     .hero-photo::after{
       content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
-      background:linear-gradient(90deg, var(--night) 0%, var(--night) 28%, transparent 55%);
+      background:linear-gradient(90deg, var(--night) 0%, rgba(14,27,46,.35) 12%, transparent 26%);
     }
   }
   /* Duotone + legibility wash: pushes the photo into the site's petrol/jade
@@ -120,6 +139,13 @@
     background:
       linear-gradient(105deg, rgba(8,59,51,.94) 0%, rgba(8,59,51,.72) 38%, rgba(8,59,51,.30) 70%, rgba(8,59,51,.15) 100%),
       linear-gradient(0deg, var(--petrol) 0%, rgba(8,59,51,.10) 42%, transparent 70%);
+  }
+  @media (min-width:900px){
+    /* At desktop the two columns are already visually separated by the
+       grid + seam fade, so the old diagonal legibility wash (tuned for
+       text sitting on top of the photo) is no longer needed — the text
+       column is solid petrol on its own. Keep only a light photo tone. */
+    .hero-wash{ background:none; }
   }
   /* Jade tone-map over the video's own colors so it never clashes. */
   .hero-tone{position:absolute;inset:0;z-index:1;background:var(--jade);mix-blend-mode:color;opacity:.28}
@@ -142,6 +168,24 @@
   }
   .hero h1 em{font-style:italic;color:var(--jade-bright)}
   .hero .sub{margin:14px 0 0;color:#d3e5dd;font-size:15px;max-width:44ch;text-shadow:0 1px 14px rgba(0,0,0,.35)}
+
+  /* Desktop hero: consolidated last so it reliably wins the cascade over
+     the base (mobile) .hero-inner / .hero-credit rules above at this
+     breakpoint — text now lives in its own left column instead of being
+     centered in empty space, and no longer needs the photo-legibility
+     text-shadows since it sits on solid petrol, not over the video. */
+  @media (min-width:900px){
+    .hero-inner{
+      grid-column:1;grid-row:1;
+      max-width:none;margin:0;width:100%;
+      padding:0 40px 0 44px;
+      display:flex;flex-direction:column;justify-content:center;
+      box-sizing:border-box;
+    }
+    .hero-credit{right:11px;left:auto}
+    .hero h1{text-shadow:none}
+    .hero .sub{text-shadow:none}
+  }
 
   /* trip meta strip */
   .trip-meta{
@@ -399,6 +443,7 @@
 <body>
 
 <header class="hero">
+<div class="hero-grid">
   <div class="hero-photo">
     <video autoplay muted loop playsinline preload="metadata"
            poster="https://images.pexels.com/videos/3502581/free-video-3502581.jpg?auto=compress&cs=tinysrgb&h=900&fit=crop&w=1200">
@@ -419,6 +464,7 @@
     <p class="updated"><span class="dot"></span><span id="updated">Loading latest…</span></p>
   </div>
   <span class="hero-credit">Video: Jaime Moreno / <a href="https://www.pexels.com/video/people-gathering-beside-the-lion-fountain-in-singapore-3502581/" target="_blank" rel="noopener">Pexels</a></span>
+</div>
 </header>
 <div class="tile-band" aria-hidden="true"></div>
 
