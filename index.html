@@ -73,24 +73,24 @@
     opacity:.92;
   }
 
-  /* ---------- Hero ---------- */
-  /* .hero is the full-bleed color backdrop (edge-to-edge on any monitor
-     width). .hero-grid is the actual content composition — on desktop it's
-     capped and centered like the rest of the site's content (main/nav
-     already cap at 660px), so the layout can't stretch into a huge dead
-     gap on ultra-wide screens. */
+  /* ---------- Hero ----------
+     One unified banner: the video is a full-width background across the
+     entire hero, with the text overlaid on top of a petrol gradient that
+     guarantees legibility. Single-layer design — there are no side-by-side
+     columns to misalign or a seam to read as "two separate boxes". */
   .hero{
     position:relative;overflow:hidden;
     background:var(--petrol);
     color:#eaf5f0;
+    min-height:340px;
   }
   .hero-grid{
-    position:relative;
+    position:relative;z-index:2;
     padding:40px 22px 34px;
     min-height:340px;
     display:flex;align-items:flex-end;
   }
-  /* Real photo layer: Gardens by the Bay at dusk. */
+  /* Full-bleed video background layer. */
   .hero-photo{
     position:absolute;inset:0;z-index:0;
     overflow:hidden;
@@ -100,65 +100,35 @@
     position:absolute;inset:0;width:100%;height:100%;
     object-fit:cover;object-position:center 35%;
   }
-  /* Below ~900px, mobile/tablet keeps the simple full-bleed overlay — this
-     is the behavior that already works well on phones, left untouched.
-     At desktop widths, the hero stops being "text floating over a corner
-     video" and becomes a real two-column layout, itself capped to a
-     sensible max-width and centered — content on the left, a genuinely
-     substantial video panel on the right, sharing one row. */
-  @media (min-width:900px){
-    .hero-grid{
-      display:grid;
-      grid-template-columns:minmax(0,1fr) minmax(320px, 42%);
-      grid-template-rows:1fr;
-      height:420px;               /* fixed banner height — the video crops
-                                     to fit this, rather than its tall
-                                     portrait shape dictating the height */
-      max-width:1180px;margin:0 auto;
-      padding:0;
-      min-height:0;
-    }
-    .hero-photo{
-      grid-column:2;grid-row:1;
-      position:relative;
-      height:100%;width:100%;      /* fills its grid cell (420px tall) */
-      overflow:hidden;
-    }
-    .hero-photo video{
-      position:absolute;inset:0;
-      width:100%;height:100%;max-width:none;
-      object-fit:cover;object-position:center 30%;  /* crop the tall video into the banner */
-    }
-    /* Seam: fades the video's left edge into the petrol column instead of
-       a hard cut, so the two panels read as one composed hero. */
-    .hero-photo::after{
-      content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
-      background:linear-gradient(90deg, var(--night) 0%, rgba(14,27,46,.35) 12%, transparent 26%);
-    }
-  }
-  /* Duotone + legibility wash: pushes the photo into the site's petrol/jade
-     palette and darkens the lower-left so the headline stays readable. */
+  /* Legibility + brand wash over the video: strong petrol on the left where
+     the text sits, fading to a light tint on the right so the Merlion shows
+     through. This is what unifies the composition — text and video are the
+     SAME element visually, not two panels. */
   .hero-wash{
     position:absolute;inset:0;z-index:1;
     background:
-      linear-gradient(105deg, rgba(8,59,51,.94) 0%, rgba(8,59,51,.72) 38%, rgba(8,59,51,.30) 70%, rgba(8,59,51,.15) 100%),
-      linear-gradient(0deg, var(--petrol) 0%, rgba(8,59,51,.10) 42%, transparent 70%);
-  }
-  @media (min-width:900px){
-    /* At desktop the two columns are already visually separated by the
-       grid + seam fade, so the old diagonal legibility wash (tuned for
-       text sitting on top of the photo) is no longer needed — the text
-       column is solid petrol on its own. Keep only a light photo tone. */
-    .hero-wash{ background:none; }
+      linear-gradient(90deg, var(--petrol) 0%, rgba(8,59,51,.96) 30%, rgba(8,59,51,.70) 55%, rgba(8,59,51,.35) 78%, rgba(8,59,51,.20) 100%),
+      linear-gradient(0deg, rgba(8,59,51,.55) 0%, transparent 45%);
   }
   /* Jade tone-map over the video's own colors so it never clashes. */
-  .hero-tone{position:absolute;inset:0;z-index:1;background:var(--jade);mix-blend-mode:color;opacity:.28}
+  .hero-tone{position:absolute;inset:0;z-index:1;background:var(--jade);mix-blend-mode:color;opacity:.30}
   .hero-credit{
     position:absolute;right:11px;bottom:8px;z-index:3;
     font-size:10px;color:rgba(234,245,240,.6);
   }
   .hero-credit a{color:inherit;text-decoration:none}
   .hero-inner{position:relative;z-index:2;max-width:var(--maxw);margin:0 auto;width:100%}
+  /* Desktop: taller banner, content constrained and left-aligned within a
+     centered max-width, sitting over the full-width video background. */
+  @media (min-width:900px){
+    .hero-grid{
+      min-height:400px;
+      max-width:1180px;margin:0 auto;
+      padding:56px 40px 44px;
+      align-items:center;
+    }
+    .hero-inner{max-width:600px;margin:0}
+  }
   .kicker{
     display:inline-flex;align-items:center;gap:7px;
     font-size:11px;letter-spacing:.18em;text-transform:uppercase;font-weight:600;
@@ -173,23 +143,6 @@
   .hero h1 em{font-style:italic;color:var(--jade-bright)}
   .hero .sub{margin:14px 0 0;color:#d3e5dd;font-size:15px;max-width:44ch;text-shadow:0 1px 14px rgba(0,0,0,.35)}
 
-  /* Desktop hero: consolidated last so it reliably wins the cascade over
-     the base (mobile) .hero-inner / .hero-credit rules above at this
-     breakpoint — text now lives in its own left column instead of being
-     centered in empty space, and no longer needs the photo-legibility
-     text-shadows since it sits on solid petrol, not over the video. */
-  @media (min-width:900px){
-    .hero-inner{
-      grid-column:1;grid-row:1;
-      max-width:none;margin:0;width:100%;
-      padding:0 40px 0 44px;
-      display:flex;flex-direction:column;justify-content:center;
-      box-sizing:border-box;
-    }
-    .hero-credit{right:11px;left:auto}
-    .hero h1{text-shadow:none}
-    .hero .sub{text-shadow:none}
-  }
 
   /* trip meta strip */
   .trip-meta{
@@ -447,7 +400,6 @@
 <body>
 
 <header class="hero">
-<div class="hero-grid">
   <div class="hero-photo">
     <video autoplay muted loop playsinline preload="metadata"
            poster="https://images.pexels.com/videos/3502581/free-video-3502581.jpg?auto=compress&cs=tinysrgb&h=900&fit=crop&w=1200">
@@ -456,6 +408,8 @@
   </div>
   <div class="hero-tone"></div>
   <div class="hero-wash"></div>
+  <span class="hero-credit">Video: Jaime Moreno / <a href="https://www.pexels.com/video/people-gathering-beside-the-lion-fountain-in-singapore-3502581/" target="_blank" rel="noopener">Pexels</a></span>
+<div class="hero-grid">
   <div class="hero-inner">
     <p class="kicker">Family Trip Hub</p>
     <h1 id="heroTitle">Singapore<br><em id="heroYear">2026</em></h1>
@@ -467,7 +421,6 @@
     </div>
     <p class="updated"><span class="dot"></span><span id="updated">Loading latest…</span></p>
   </div>
-  <span class="hero-credit">Video: Jaime Moreno / <a href="https://www.pexels.com/video/people-gathering-beside-the-lion-fountain-in-singapore-3502581/" target="_blank" rel="noopener">Pexels</a></span>
 </div>
 </header>
 <div class="tile-band" aria-hidden="true"></div>
