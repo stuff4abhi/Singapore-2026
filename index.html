@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Our Singapore Trip · Family Hub</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23064e40'/%3E%3Cpath d='M16 6l3 7 7 3-7 3-3 7-3-7-7-3 7-3z' fill='%235fd6b4'/%3E%3C/svg%3E">
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#083b33">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -342,6 +344,18 @@
     .ref-value a{color:var(--jade);text-decoration:none;border-bottom:1px solid var(--jade-soft)}
     .ref-note{font-size:13px;color:var(--ink-soft);margin-top:2px}
 
+    /* ---------- Files ---------- */
+    .files-hint{font-size:12.5px;color:var(--ink-soft);margin:-2px 2px 16px}
+    .file-row{padding:13px 0;border-bottom:1px solid var(--line-soft);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+    .file-row:last-child{border-bottom:0}
+    .file-main{display:flex;flex-direction:column;gap:2px}
+    .file-name{font-size:15.5px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:6px}
+    .file-pin{font-size:12px}
+    .file-person{font-size:12.5px;color:var(--mist)}
+    .file-actions{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+    .file-actions a{font-size:13.5px;font-weight:600;color:var(--jade);text-decoration:none;border-bottom:1px solid var(--jade-soft);white-space:nowrap}
+    .file-actions a:hover{border-bottom-color:var(--jade)}
+
     /* ---------- Itinerary timeline ---------- */
     .day{margin-bottom:22px}
     .day-label{
@@ -468,6 +482,7 @@
     { id:"food",      label:"Eat & Drink",tab:"Eat & Drink", icon:"🍜", dated:"single", group:"Explore" },
     { id:"events",    label:"Event info", tab:"Event Info",  icon:"📍", dated:"none",   group:"Explore" },
     { id:"essentials",label:"Essentials", tab:"Essentials",  icon:"🛟", dated:"none",   group:"Essentials", render:"reference" },
+    { id:"files",     label:"Files",      tab:"Files",       icon:"📁", dated:"none",   group:"Essentials", render:"files" },
   ];
   /* ===================== end config ===================== */
 
@@ -742,6 +757,73 @@
     }).join("");
   }
 
+  // Drive share links (".../file/d/<ID>/view") only return an HTML viewer —
+  // not file bytes — so offline caching needs the direct-download form instead.
+  function driveFileId(url){
+    const m = String(url).match(/\/d\/([a-zA-Z0-9_-]+)/) || String(url).match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    return m ? m[1] : null;
+  }
+  function driveDirectUrl(url){
+    const id = driveFileId(url);
+    return id ? `https://drive.google.com/uc?export=download&id=${id}` : url;
+  }
+
+  // Files renderer: grouped by Category like Essentials, but each row is a
+  // document link rather than a label/value pair. Essential rows get a pin
+  // badge and a second "Open saved copy" link that reveals itself once
+  // pinEssentialFiles() has actually cached that file for offline use — see
+  // that function for why this can only ever be a best-effort feature.
+  function renderFiles(rows, sec){
+    if(!rows.length) return emptyState(sec);
+    const keys = Object.keys(rows[0]);
+    const catK = keys.find(k=>/category/i.test(k)) || keys[0];
+    const nameK = keys.find(k=>/name|title/i.test(k)) || keys[1] || keys[0];
+    const personK = keys.find(k=>/person/i.test(k));
+    const linkK = keys.find(k=>/link|url/i.test(k));
+    const essentialK = keys.find(k=>/essential/i.test(k));
+    const noteK = keys.find(k=>/note/i.test(k));
+
+    const CAT_ICON = {
+      passports:"🛂", visas:"🪪", tickets:"🎫",
+      "hotel vouchers":"🏨", insurance:"🩺",
+    };
+    const groups = {};
+    rows.forEach(r=>{
+      const cat = (r[catK] || "Other").trim();
+      (groups[cat] = groups[cat] || []).push(r);
+    });
+
+    let idx = 0;
+    const body = Object.entries(groups).map(([cat, items])=>{
+      const icon = CAT_ICON[cat.toLowerCase()] || "📁";
+      return `
+    <div class="ref-group">
+      <div class="ref-group-label"><span>${icon}</span>${esc(cat)}</div>
+      <div class="card">
+        ${items.map(r=>{
+          const link = linkK && r[linkK] || "";
+          const isEssential = essentialK && /^y/i.test(r[essentialK] || "");
+          const fileId = idx++;
+          return `
+          <div class="file-row">
+            <div class="file-main">
+              <div class="file-name">${isEssential ? '<span class="file-pin" title="Essential">📌</span>' : ""}${esc(r[nameK] || "")}</div>
+              ${personK && r[personK] ? `<div class="file-person">${esc(r[personK])}</div>` : ""}
+              ${noteK && r[noteK] ? `<div class="ref-note">${esc(r[noteK])}</div>` : ""}
+            </div>
+            <div class="file-actions">
+              ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Open in Drive ↗</a>` : ""}
+              ${isEssential && link ? `<a class="file-offline" id="file-offline-${fileId}" data-cache-key="${esc(driveDirectUrl(link))}" style="display:none">📌 Open saved copy</a>` : ""}
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`;
+    }).join("");
+
+    return `<p class="files-hint">📌 marks essential files. Best effort: a saved copy works offline only if you've opened this once while online and are still signed into your Google account on this device — the "Open in Drive" link is always the reliable option.</p>${body}`;
+  }
+
   // ---------- renderers ----------
   function renderCards(rows, sec){
     if(!rows.length) return emptyState(sec);
@@ -832,9 +914,11 @@
       SECTION_DATA[sec.id] = rows;                       // cache for the Overview
       el.innerHTML = sec.render==="timeline" ? renderTimeline(rows, sec)
               : sec.render==="reference" ? renderReference(rows, sec)
+              : sec.render==="files" ? renderFiles(rows, sec)
                       : renderCards(rows, sec);
       const cnt = document.getElementById("count-"+sec.id);
       if(cnt) cnt.textContent = rows.length ? `${rows.length} item${rows.length>1?"s":""}` : "";
+      if(sec.render==="files") pinEssentialFiles(rows);  // fire-and-forget, best effort
       return true;
     }catch(err){
       SECTION_DATA[sec.id] = [];
@@ -849,6 +933,48 @@
 
   // Cache of parsed rows per section id, populated by loadSection.
   const SECTION_DATA = {};
+
+  // Best-effort offline pinning for Essential files. This can only ever be
+  // best-effort: the Drive folder is shared in restricted (sign-in-required)
+  // mode, so a cross-origin fetch here only succeeds if this device already
+  // has an authenticated Google session and the browser doesn't block that
+  // session's cookie on a cross-site request (iOS Safari's ITP is the main
+  // risk). Failures are silently swallowed — the plain "Open in Drive" link
+  // rendered by renderFiles() never depends on any of this and always works.
+  const FILES_CACHE = "sg2026-files-v1";
+
+  async function pinEssentialFiles(rows){
+    if(!("caches" in window)) return;
+    const cache = await caches.open(FILES_CACHE);
+    for(const r of rows){
+      const essentialK = Object.keys(r).find(k=>/essential/i.test(k));
+      const linkK = Object.keys(r).find(k=>/link|url/i.test(k));
+      if(!essentialK || !/^y/i.test(r[essentialK] || "")) continue;
+      const link = linkK && r[linkK]; if(!link) continue;
+      const direct = driveDirectUrl(link);
+      if(await cache.match(direct)) continue;              // already pinned
+      try{
+        const resp = await fetch(direct, { mode:"no-cors", credentials:"include" });
+        await cache.put(direct, resp);                      // opaque — can't verify it's the real file, accepted as a known limitation
+      }catch(_){ /* offline, blocked cookie, or not signed in — best effort, ignore */ }
+    }
+    markOfflineBadges();
+  }
+
+  async function markOfflineBadges(){
+    if(!("caches" in window)) return;
+    const cache = await caches.open(FILES_CACHE);
+    document.querySelectorAll(".file-offline[data-cache-key]").forEach(async a=>{
+      const hit = await cache.match(a.dataset.cacheKey);
+      if(!hit) return;
+      // Set href synchronously here (before any click) so the browser never
+      // sees window.open() called after an await — that's what mobile
+      // Safari/Chrome popup blockers would otherwise kill.
+      const blob = await hit.blob();
+      a.href = URL.createObjectURL(blob);
+      a.style.display = "";
+    });
+  }
 
   // ---------- Overview dashboard ----------
   function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
@@ -1070,11 +1196,16 @@
       const tripConfig = results[results.length - 1] || {};
       applyTripConfig(tripConfig);
       buildOverview();
+      const offlinePrefix = navigator.onLine ? "" : "Offline — showing last loaded data. ";
       document.getElementById("updated").textContent =
-              "Updated " + new Date().toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});
+              offlinePrefix + "Updated " + new Date().toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});
     });
   }
   boot();
+
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", ()=> navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+  }
 </script>
 </body>
 </html>

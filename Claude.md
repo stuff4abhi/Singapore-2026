@@ -62,7 +62,7 @@ A fully functional, mobile-first **trip planning hub** for your Singapore 2026 f
 
 ### Data structure (Google Sheet)
 
-- **Tabs:** Trip Config, Tickets/Flights, Hotels/Stays, Itinerary, Bookings/Activities, Event Info, Eat & Drink, Essentials
+- **Tabs:** Trip Config, Tickets/Flights, Hotels/Stays, Itinerary, Bookings/Activities, Event Info, Eat & Drink, Essentials, Files
 - **Data flow:** gviz API → parsed into SECTION_DATA cache → rendered as cards/timeline/reference lists
 - **Live editing:** family updates the Sheet; site refreshes on next page open to show changes
 
@@ -92,14 +92,19 @@ No backend, no code editing, no API keys. One Google Sheet + one HTML file = sha
 
 ---
 
+## Files feature (shipped)
+
+Personal documents (passport/visa scans, tickets, hotel vouchers) used to be committed directly into this repo under `files/` — since this repo is served publicly via GitHub Pages, that leaked passport and visa scans to anyone with the site URL. Those files have been removed from the repo entirely and replaced with a **Files** tab in the Sheet:
+
+- **Schema:** `Category | Name | Person | Drive Link | Essential | Notes` — files live in a Google Drive folder shared in **restricted** mode (requires an authorized Google account, not "anyone with the link"). This is a deliberate departure from the original "anyone with link" idea, chosen for privacy.
+- **Rendering:** `renderFiles()` in `index.html` groups rows by Category, shows a 📌 badge for `Essential = Yes` rows, and always renders a plain "Open in Drive" link that works with zero JS dependency.
+- **Offline pinning (best effort, not guaranteed):** `pinEssentialFiles()`/`markOfflineBadges()` in `index.html` use the page's Cache Storage API directly to try to save Essential files for offline use. This only works if the device already has an authenticated Google session with folder access and the browser doesn't block that session's cookie on a cross-site fetch — iOS Safari's ITP and Chrome's evolving third-party-cookie rules can silently prevent it. When pinning succeeds, a second "📌 Open saved copy" link appears; when it doesn't, the primary "Open in Drive" link is unaffected and is the reliable fallback.
+- **Known limitation — do not "fix" by routing through the service worker:** `sw.js` is registered on the GitHub Pages origin and can only ever intercept same-origin requests/navigations. It cannot intercept navigations to `drive.google.com`, so file pinning is necessarily page-side (Cache Storage API), not service-worker-side. `sw.js` only caches the app shell (`index.html`, `manifest.json`) so the site itself still opens with no signal.
+- **PWA foundation shipped:** minimal `manifest.json` + `sw.js` at repo root (app-shell caching + installability only). The full `css/`+`js/` module refactor described below under "Recommended for scaling" has **not** been done and remains future work if the project grows further.
+
 ## Upgrade plan (parked for later)
 
-Three phases proposed, each incrementally adding capability while maintaining the static-site + free model:
-
-### Phase 1 — Files with offline access
-- New `Files` sheet tab linking to PDFs in a shared Drive folder
-- Boarding passes, hotel vouchers, insurance docs — all accessible and searchable
-- **Offline pinning** via service worker so critical files (marked "Essential = Yes") work with zero signal
+Two phases proposed, each incrementally adding capability while maintaining the static-site + free model:
 
 ### Phase 2 — "Around You Now" — contextual discovery
 - Uses free OpenStreetMap Overpass API + Wikipedia GeoSearch (no keys, no cost)
@@ -113,11 +118,11 @@ Three phases proposed, each incrementally adding capability while maintaining th
 - Site renders a warm, chronological feed of memories — author, note, timestamp, photo gallery
 - You can moderate by editing/deleting rows; everything stays in your Sheet
 
-### Foundation for all three: PWA + offline
-- Refactor single file into organized modules (config, cache, sheets, sections, etc.)
-- Add service worker + manifest so the hub is installable ("Add to Home Screen")
-- Implement localStorage caching so the site opens instantly and works offline
-- Show "Updated 2 min ago / offline — showing saved copy" timestamp so users trust what they see
+### Foundation for these remaining phases: PWA + offline
+- A **minimal** service worker + manifest already ship as part of the Files feature above (app-shell caching + installability only) — this section is about the fuller version needed for Phases 2/3
+- Refactor single file into organized modules (config, cache, sheets, sections, etc.) — still not done
+- Implement localStorage caching of Sheet data (all tabs, not just the app shell) so the site opens instantly and works fully offline
+- Show "Updated 2 min ago / offline — showing saved copy" timestamp for Sheet data freshness (the Files section already has its own narrower offline messaging; this would extend the idea site-wide)
 - Makes travel truly work — bad hotel wifi? App opens instantly and works anyway
 
 ---
