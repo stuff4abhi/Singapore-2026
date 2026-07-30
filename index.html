@@ -353,8 +353,29 @@
     .file-pin{font-size:12px}
     .file-person{font-size:12.5px;color:var(--mist)}
     .file-actions{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
-    .file-actions a{font-size:13.5px;font-weight:600;color:var(--jade);text-decoration:none;border-bottom:1px solid var(--jade-soft);white-space:nowrap}
-    .file-actions a:hover{border-bottom-color:var(--jade)}
+    .file-actions a,.file-actions button{font:inherit;font-size:13.5px;font-weight:600;color:var(--jade);text-decoration:none;border:0;border-bottom:1px solid var(--jade-soft);background:none;padding:0;cursor:pointer;white-space:nowrap}
+    .file-actions a:hover,.file-actions button:hover{border-bottom-color:var(--jade)}
+
+    /* ---------- File preview lightbox ---------- */
+    .file-preview-overlay{
+      position:fixed;inset:0;background:rgba(6,20,17,.72);z-index:50;
+      display:flex;align-items:center;justify-content:center;padding:20px;
+      opacity:0;pointer-events:none;transition:opacity .18s;
+    }
+    .file-preview-overlay.is-open{opacity:1;pointer-events:auto}
+    .file-preview-box{
+      position:relative;max-width:min(520px,92vw);max-height:88vh;
+      background:var(--card);border-radius:var(--radius);padding:16px;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .file-preview-box img{max-width:100%;max-height:80vh;border-radius:var(--radius-sm);display:block}
+    .file-preview-box img[hidden]{display:none}
+    .file-preview-close{
+      position:absolute;top:-14px;right:-14px;width:32px;height:32px;border-radius:50%;
+      background:var(--ink);color:#fff;border:0;font-size:14px;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);
+    }
+    .file-preview-fallback{font-size:14px;color:var(--ink-soft);text-align:center;max-width:280px;margin:0}
 
     /* ---------- Itinerary timeline ---------- */
     .day{margin-bottom:22px}
@@ -456,6 +477,14 @@
 <main id="app">
   <div class="state" id="boot">Fetching the latest trip details…</div>
 </main>
+
+<div class="file-preview-overlay" id="filePreview" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="file-preview-box">
+    <button type="button" class="file-preview-close" id="filePreviewClose" aria-label="Close">✕</button>
+    <img id="filePreviewImg" alt="Saved offline copy">
+    <p class="file-preview-fallback" id="filePreviewFallback" hidden>Saved offline, but this file type can't be previewed here (only images can). Use "Open in Drive" once you're back online.</p>
+  </div>
+</div>
 
 <div class="tile-band" aria-hidden="true"></div>
 <footer>
@@ -807,12 +836,14 @@
           const link = linkK && r[linkK] || "";
           const isEssential = essentialK && /^y/i.test(r[essentialK] || "");
           const direct = link ? driveDirectUrl(link) : "";
-          // The offline copy is served by sw.js from an opaque cached response.
-          // Opaque response bytes can never be read by page JS (that's the
-          // point of "opaque" — a Same-Origin Policy restriction, not a bug),
-          // so this link must be a same-origin URL the service worker
-          // intercepts and answers directly from cache — never a blob: URL
-          // built from JS reading the cached response itself.
+          // The offline copy is previewed inline (an <img> inside the page),
+          // not opened as its own tab/navigation. A cross-origin opaque
+          // response (from the no-cors Drive fetch) reports status 0 with no
+          // readable headers, and browsers will reject that as an invalid
+          // page when used to answer a full-page navigation — but they
+          // render it fine as a same-origin *subresource* (this <img>'s src,
+          // fetched through sw.js's proxy route), which is why this can only
+          // ever work for image files, not a real new-tab/download link.
           const offlineHref = direct ? `./offline-file/?src=${encodeURIComponent(direct)}` : "";
           return `
           <div class="file-row">
@@ -823,7 +854,7 @@
             </div>
             <div class="file-actions">
               ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Open in Drive ↗</a>` : ""}
-              ${isEssential && link ? `<a class="file-offline" href="${esc(offlineHref)}" target="_blank" rel="noopener" data-cache-key="${esc(direct)}" style="display:none">📌 Open saved copy</a>` : ""}
+              ${isEssential && link ? `<button type="button" class="file-offline" data-offline-src="${esc(offlineHref)}" data-cache-key="${esc(direct)}" style="display:none">📌 Open saved copy</button>` : ""}
             </div>
           </div>`;
         }).join("")}
@@ -831,7 +862,7 @@
     </div>`;
     }).join("");
 
-    return `<p class="files-hint">📌 marks essential files. Best effort: a saved copy works offline only if you've opened this once while online and are still signed into your Google account on this device — the "Open in Drive" link is always the reliable option.</p>${body}`;
+    return `<p class="files-hint">📌 marks essential files. Best effort: "Open saved copy" shows an inline preview (image files only) if you've opened it once while online and are still signed into your Google account on this device — the "Open in Drive" link is always the reliable option.</p>${body}`;
   }
 
   // ---------- renderers ----------
@@ -974,20 +1005,48 @@
   async function markOfflineBadges(){
     if(!("caches" in window)) return;
     const cache = await caches.open(FILES_CACHE);
-    document.querySelectorAll(".file-offline[data-cache-key]").forEach(async a=>{
+    document.querySelectorAll(".file-offline[data-cache-key]").forEach(async btn=>{
       // Only check whether the file is cached — never read the cached
       // response's body here. It's an opaque (no-cors) cross-origin response,
       // and the Fetch API deliberately hides opaque response bodies from
       // page script (that's what "opaque" means), so reading it would only
-      // ever yield an empty blob. The link's href already points at
-      // ./offline-file/?src=... , a same-origin URL that sw.js intercepts
-      // and answers directly from this same cache — the browser is allowed
-      // to render an opaque body when driving a real navigation, even though
-      // script can't inspect it.
-      const hit = await cache.match(a.dataset.cacheKey);
-      if(hit) a.style.display = "";
+      // ever yield an empty blob.
+      const hit = await cache.match(btn.dataset.cacheKey);
+      if(hit) btn.style.display = "";
     });
   }
+
+  // Shows the pinned file inline (an <img> inside the current page) rather
+  // than opening it as its own tab. Browsers reject a cross-origin opaque
+  // response (status 0, no headers) when it's used to answer a full-page
+  // navigation, but they'll happily render the same opaque bytes as an <img>
+  // subresource fetched from within an already-open page — that's the whole
+  // reason this is a lightbox instead of a link, and why it only works for
+  // image files (a non-image will simply fail to decode and fall back).
+  function openFilePreview(src){
+    const overlay = document.getElementById("filePreview");
+    const img = document.getElementById("filePreviewImg");
+    const fallback = document.getElementById("filePreviewFallback");
+    img.hidden = false; fallback.hidden = true;
+    img.onerror = () => { img.hidden = true; fallback.hidden = false; };
+    img.src = src;
+    overlay.classList.add("is-open");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+  function closeFilePreview(){
+    const overlay = document.getElementById("filePreview");
+    overlay.classList.remove("is-open");
+    overlay.setAttribute("aria-hidden", "true");
+    document.getElementById("filePreviewImg").src = "";
+  }
+  document.getElementById("filePreviewClose").addEventListener("click", closeFilePreview);
+  document.getElementById("filePreview").addEventListener("click", e=>{
+    if(e.target.id === "filePreview") closeFilePreview();
+  });
+  document.getElementById("app").addEventListener("click", e=>{
+    const btn = e.target.closest(".file-offline[data-offline-src]");
+    if(btn) openFilePreview(btn.dataset.offlineSrc);
+  });
 
   // ---------- Overview dashboard ----------
   function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
