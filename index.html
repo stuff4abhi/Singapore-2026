@@ -757,12 +757,16 @@
     }).join("");
   }
 
-  // Drive share links (".../file/d/<ID>/view") only return an HTML viewer —
-  // not file bytes — so offline caching needs the direct-download form instead.
   function driveFileId(url){
     const m = String(url).match(/\/d\/([a-zA-Z0-9_-]+)/) || String(url).match(/[?&]id=([a-zA-Z0-9_-]+)/);
     return m ? m[1] : null;
   }
+  // Drive's ".../file/d/<ID>/view" page is an HTML viewer shell whose own JS
+  // fetches the actual preview — caching that shell wouldn't render offline
+  // with no signal. This direct-download form returns the real file bytes
+  // instead, which is what pinEssentialFiles() needs to cache for genuine
+  // offline use (the primary "Open in Drive" link still uses the sheet's
+  // original view link, unaffected by this).
   function driveDirectUrl(url){
     const id = driveFileId(url);
     return id ? `https://drive.google.com/uc?export=download&id=${id}` : url;
