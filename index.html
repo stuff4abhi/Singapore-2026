@@ -793,7 +793,6 @@
       (groups[cat] = groups[cat] || []).push(r);
     });
 
-    let idx = 0;
     const body = Object.entries(groups).map(([cat, items])=>{
       const icon = CAT_ICON[cat.toLowerCase()] || "📁";
       return `
@@ -803,7 +802,14 @@
         ${items.map(r=>{
           const link = linkK && r[linkK] || "";
           const isEssential = essentialK && /^y/i.test(r[essentialK] || "");
-          const fileId = idx++;
+          const direct = link ? driveDirectUrl(link) : "";
+          // The offline copy is served by sw.js from an opaque cached response.
+          // Opaque response bytes can never be read by page JS (that's the
+          // point of "opaque" — a Same-Origin Policy restriction, not a bug),
+          // so this link must be a same-origin URL the service worker
+          // intercepts and answers directly from cache — never a blob: URL
+          // built from JS reading the cached response itself.
+          const offlineHref = direct ? `./offline-file/?src=${encodeURIComponent(direct)}` : "";
           return `
           <div class="file-row">
             <div class="file-main">
@@ -813,7 +819,7 @@
             </div>
             <div class="file-actions">
               ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Open in Drive ↗</a>` : ""}
-              ${isEssential && link ? `<a class="file-offline" id="file-offline-${fileId}" data-cache-key="${esc(driveDirectUrl(link))}" style="display:none">📌 Open saved copy</a>` : ""}
+              ${isEssential && link ? `<a class="file-offline" href="${esc(offlineHref)}" target="_blank" rel="noopener" data-cache-key="${esc(direct)}" style="display:none">📌 Open saved copy</a>` : ""}
             </div>
           </div>`;
         }).join("")}
@@ -965,14 +971,17 @@
     if(!("caches" in window)) return;
     const cache = await caches.open(FILES_CACHE);
     document.querySelectorAll(".file-offline[data-cache-key]").forEach(async a=>{
+      // Only check whether the file is cached — never read the cached
+      // response's body here. It's an opaque (no-cors) cross-origin response,
+      // and the Fetch API deliberately hides opaque response bodies from
+      // page script (that's what "opaque" means), so reading it would only
+      // ever yield an empty blob. The link's href already points at
+      // ./offline-file/?src=... , a same-origin URL that sw.js intercepts
+      // and answers directly from this same cache — the browser is allowed
+      // to render an opaque body when driving a real navigation, even though
+      // script can't inspect it.
       const hit = await cache.match(a.dataset.cacheKey);
-      if(!hit) return;
-      // Set href synchronously here (before any click) so the browser never
-      // sees window.open() called after an await — that's what mobile
-      // Safari/Chrome popup blockers would otherwise kill.
-      const blob = await hit.blob();
-      a.href = URL.createObjectURL(blob);
-      a.style.display = "";
+      if(hit) a.style.display = "";
     });
   }
 
