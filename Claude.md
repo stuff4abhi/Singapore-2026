@@ -55,6 +55,29 @@ A fully functional, mobile-first **trip planning hub** for your Singapore 2026 f
 - Optimized single-file design (no build step, no dependencies)
 - Fast on mobile networks
 
+### Key fixes applied (in order)
+
+- Resolved Eat & Drink header-as-data bug — gviz sometimes fails to detect headers; added safety net to promote real header row if needed
+- Added restaurant map links — address field combines name + address + Singapore for strongest Maps match
+
+### Data structure (Google Sheet)
+
+- **Tabs:** Trip Config, Tickets/Flights, Hotels/Stays, Itinerary, Bookings/Activities, Event Info, Eat & Drink, Essentials
+- **Data flow:** gviz API → parsed into SECTION_DATA cache → rendered as cards/timeline/reference lists
+- **Live editing:** family updates the Sheet; site refreshes on next page open to show changes
+
+---
+
+### What works now
+
+✅ Mobile view (confirmed great)  
+✅ Desktop view (unified hero, no split rendering)  
+✅ Live Sheet data  
+✅ Status auto-calculation  
+✅ Smart linking (maps, phone, URLs)  
+✅ Responsive nav with grouping  
+✅ Bounded, proportional hero banner  
+✅ Moving water background (nighttime skyline video)
 ---
 
 ## How to use right now
