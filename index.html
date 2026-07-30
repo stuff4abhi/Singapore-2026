@@ -353,29 +353,8 @@
     .file-pin{font-size:12px}
     .file-person{font-size:12.5px;color:var(--mist)}
     .file-actions{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
-    .file-actions a,.file-actions button{font:inherit;font-size:13.5px;font-weight:600;color:var(--jade);text-decoration:none;border:0;border-bottom:1px solid var(--jade-soft);background:none;padding:0;cursor:pointer;white-space:nowrap}
-    .file-actions a:hover,.file-actions button:hover{border-bottom-color:var(--jade)}
-
-    /* ---------- File preview lightbox ---------- */
-    .file-preview-overlay{
-      position:fixed;inset:0;background:rgba(6,20,17,.72);z-index:50;
-      display:flex;align-items:center;justify-content:center;padding:20px;
-      opacity:0;pointer-events:none;transition:opacity .18s;
-    }
-    .file-preview-overlay.is-open{opacity:1;pointer-events:auto}
-    .file-preview-box{
-      position:relative;max-width:min(520px,92vw);max-height:88vh;
-      background:var(--card);border-radius:var(--radius);padding:16px;
-      display:flex;align-items:center;justify-content:center;
-    }
-    .file-preview-box img{max-width:100%;max-height:80vh;border-radius:var(--radius-sm);display:block}
-    .file-preview-box img[hidden]{display:none}
-    .file-preview-close{
-      position:absolute;top:-14px;right:-14px;width:32px;height:32px;border-radius:50%;
-      background:var(--ink);color:#fff;border:0;font-size:14px;cursor:pointer;
-      display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);
-    }
-    .file-preview-fallback{font-size:14px;color:var(--ink-soft);text-align:center;max-width:280px;margin:0}
+    .file-actions a{font-size:13.5px;font-weight:600;color:var(--jade);text-decoration:none;border-bottom:1px solid var(--jade-soft);white-space:nowrap}
+    .file-actions a:hover{border-bottom-color:var(--jade)}
 
     /* ---------- Itinerary timeline ---------- */
     .day{margin-bottom:22px}
@@ -477,14 +456,6 @@
 <main id="app">
   <div class="state" id="boot">Fetching the latest trip details…</div>
 </main>
-
-<div class="file-preview-overlay" id="filePreview" role="dialog" aria-modal="true" aria-hidden="true">
-  <div class="file-preview-box">
-    <button type="button" class="file-preview-close" id="filePreviewClose" aria-label="Close">✕</button>
-    <img id="filePreviewImg" alt="Saved offline copy">
-    <p class="file-preview-fallback" id="filePreviewFallback" hidden>Saved offline, but this file type can't be previewed here (only images can). Use "Open in Drive" once you're back online.</p>
-  </div>
-</div>
 
 <div class="tile-band" aria-hidden="true"></div>
 <footer>
@@ -786,26 +757,17 @@
     }).join("");
   }
 
-  function driveFileId(url){
-    const m = String(url).match(/\/d\/([a-zA-Z0-9_-]+)/) || String(url).match(/[?&]id=([a-zA-Z0-9_-]+)/);
-    return m ? m[1] : null;
-  }
-  // Drive's ".../file/d/<ID>/view" page is an HTML viewer shell whose own JS
-  // fetches the actual preview — caching that shell wouldn't render offline
-  // with no signal. This direct-download form returns the real file bytes
-  // instead, which is what pinEssentialFiles() needs to cache for genuine
-  // offline use (the primary "Open in Drive" link still uses the sheet's
-  // original view link, unaffected by this).
-  function driveDirectUrl(url){
-    const id = driveFileId(url);
-    return id ? `https://drive.google.com/uc?export=download&id=${id}` : url;
-  }
-
   // Files renderer: grouped by Category like Essentials, but each row is a
   // document link rather than a label/value pair. Essential rows get a pin
-  // badge and a second "Open saved copy" link that reveals itself once
-  // pinEssentialFiles() has actually cached that file for offline use — see
-  // that function for why this can only ever be a best-effort feature.
+  // badge — offline access for those is handled by the Drive app's own
+  // "Available offline" feature (see the hint text below), not by this site.
+  // An earlier version tried to cache Drive files in the browser itself via
+  // a no-cors fetch; that reliably failed because the restricted-sharing
+  // fetch runs unauthenticated on iOS (Safari blocks the cross-site auth
+  // cookie), so Drive served a login/permission page instead of file bytes
+  // — invisibly, since opaque responses can't be inspected by script. That
+  // approach could only be fixed by adding real OAuth (Drive API v3), which
+  // is a bigger, separate project — see Claude.md's Files section.
   function renderFiles(rows, sec){
     if(!rows.length) return emptyState(sec);
     const keys = Object.keys(rows[0]);
@@ -835,26 +797,15 @@
         ${items.map(r=>{
           const link = linkK && r[linkK] || "";
           const isEssential = essentialK && /^y/i.test(r[essentialK] || "");
-          const direct = link ? driveDirectUrl(link) : "";
-          // The offline copy is previewed inline (an <img> inside the page),
-          // not opened as its own tab/navigation. A cross-origin opaque
-          // response (from the no-cors Drive fetch) reports status 0 with no
-          // readable headers, and browsers will reject that as an invalid
-          // page when used to answer a full-page navigation — but they
-          // render it fine as a same-origin *subresource* (this <img>'s src,
-          // fetched through sw.js's proxy route), which is why this can only
-          // ever work for image files, not a real new-tab/download link.
-          const offlineHref = direct ? `./offline-file/?src=${encodeURIComponent(direct)}` : "";
           return `
           <div class="file-row">
             <div class="file-main">
-              <div class="file-name">${isEssential ? '<span class="file-pin" title="Essential">📌</span>' : ""}${esc(r[nameK] || "")}</div>
+              <div class="file-name">${isEssential ? '<span class="file-pin" title="Essential — mark offline in the Drive app">📌</span>' : ""}${esc(r[nameK] || "")}</div>
               ${personK && r[personK] ? `<div class="file-person">${esc(r[personK])}</div>` : ""}
               ${noteK && r[noteK] ? `<div class="ref-note">${esc(r[noteK])}</div>` : ""}
             </div>
             <div class="file-actions">
               ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Open in Drive ↗</a>` : ""}
-              ${isEssential && link ? `<button type="button" class="file-offline" data-offline-src="${esc(offlineHref)}" data-cache-key="${esc(direct)}" style="display:none">📌 Open saved copy</button>` : ""}
             </div>
           </div>`;
         }).join("")}
@@ -862,7 +813,7 @@
     </div>`;
     }).join("");
 
-    return `<p class="files-hint">📌 marks essential files. Best effort: "Open saved copy" shows an inline preview (image files only) if you've opened it once while online and are still signed into your Google account on this device — the "Open in Drive" link is always the reliable option.</p>${body}`;
+    return `<p class="files-hint">📌 marks essential files (passport, boarding pass). For real offline access — images, PDFs, and spreadsheets alike — install the <strong>Google Drive app</strong>, sign in with the account this folder is shared with, then open each 📌 file once and tap ⋮ → <strong>Make available offline</strong>. That's a one-time, 2-minute setup per phone; after that it works with zero signal.</p>${body}`;
   }
 
   // ---------- renderers ----------
@@ -959,7 +910,6 @@
                       : renderCards(rows, sec);
       const cnt = document.getElementById("count-"+sec.id);
       if(cnt) cnt.textContent = rows.length ? `${rows.length} item${rows.length>1?"s":""}` : "";
-      if(sec.render==="files") pinEssentialFiles(rows);  // fire-and-forget, best effort
       return true;
     }catch(err){
       SECTION_DATA[sec.id] = [];
@@ -975,78 +925,13 @@
   // Cache of parsed rows per section id, populated by loadSection.
   const SECTION_DATA = {};
 
-  // Best-effort offline pinning for Essential files. This can only ever be
-  // best-effort: the Drive folder is shared in restricted (sign-in-required)
-  // mode, so a cross-origin fetch here only succeeds if this device already
-  // has an authenticated Google session and the browser doesn't block that
-  // session's cookie on a cross-site request (iOS Safari's ITP is the main
-  // risk). Failures are silently swallowed — the plain "Open in Drive" link
-  // rendered by renderFiles() never depends on any of this and always works.
-  const FILES_CACHE = "sg2026-files-v1";
-
-  async function pinEssentialFiles(rows){
-    if(!("caches" in window)) return;
-    const cache = await caches.open(FILES_CACHE);
-    for(const r of rows){
-      const essentialK = Object.keys(r).find(k=>/essential/i.test(k));
-      const linkK = Object.keys(r).find(k=>/link|url/i.test(k));
-      if(!essentialK || !/^y/i.test(r[essentialK] || "")) continue;
-      const link = linkK && r[linkK]; if(!link) continue;
-      const direct = driveDirectUrl(link);
-      if(await cache.match(direct)) continue;              // already pinned
-      try{
-        const resp = await fetch(direct, { mode:"no-cors", credentials:"include" });
-        await cache.put(direct, resp);                      // opaque — can't verify it's the real file, accepted as a known limitation
-      }catch(_){ /* offline, blocked cookie, or not signed in — best effort, ignore */ }
-    }
-    markOfflineBadges();
-  }
-
-  async function markOfflineBadges(){
-    if(!("caches" in window)) return;
-    const cache = await caches.open(FILES_CACHE);
-    document.querySelectorAll(".file-offline[data-cache-key]").forEach(async btn=>{
-      // Only check whether the file is cached — never read the cached
-      // response's body here. It's an opaque (no-cors) cross-origin response,
-      // and the Fetch API deliberately hides opaque response bodies from
-      // page script (that's what "opaque" means), so reading it would only
-      // ever yield an empty blob.
-      const hit = await cache.match(btn.dataset.cacheKey);
-      if(hit) btn.style.display = "";
-    });
-  }
-
-  // Shows the pinned file inline (an <img> inside the current page) rather
-  // than opening it as its own tab. Browsers reject a cross-origin opaque
-  // response (status 0, no headers) when it's used to answer a full-page
-  // navigation, but they'll happily render the same opaque bytes as an <img>
-  // subresource fetched from within an already-open page — that's the whole
-  // reason this is a lightbox instead of a link, and why it only works for
-  // image files (a non-image will simply fail to decode and fall back).
-  function openFilePreview(src){
-    const overlay = document.getElementById("filePreview");
-    const img = document.getElementById("filePreviewImg");
-    const fallback = document.getElementById("filePreviewFallback");
-    img.hidden = false; fallback.hidden = true;
-    img.onerror = () => { img.hidden = true; fallback.hidden = false; };
-    img.src = src;
-    overlay.classList.add("is-open");
-    overlay.setAttribute("aria-hidden", "false");
-  }
-  function closeFilePreview(){
-    const overlay = document.getElementById("filePreview");
-    overlay.classList.remove("is-open");
-    overlay.setAttribute("aria-hidden", "true");
-    document.getElementById("filePreviewImg").src = "";
-  }
-  document.getElementById("filePreviewClose").addEventListener("click", closeFilePreview);
-  document.getElementById("filePreview").addEventListener("click", e=>{
-    if(e.target.id === "filePreview") closeFilePreview();
-  });
-  document.getElementById("app").addEventListener("click", e=>{
-    const btn = e.target.closest(".file-offline[data-offline-src]");
-    if(btn) openFilePreview(btn.dataset.offlineSrc);
-  });
+  // One-time cleanup: earlier versions of this site tried to cache Drive
+  // files in the browser for offline use (sg2026-files-v1). That approach
+  // is retired — the restricted-sharing fetch ran unauthenticated on iOS
+  // and silently cached a Google login page instead of the real file, with
+  // no way to detect it (opaque responses can't be inspected). Purge any
+  // leftover poisoned entries from devices that ran that code.
+  if("caches" in window) caches.delete("sg2026-files-v1");
 
   // ---------- Overview dashboard ----------
   function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
