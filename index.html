@@ -350,7 +350,6 @@
     .file-row:last-child{border-bottom:0}
     .file-main{display:flex;flex-direction:column;gap:2px}
     .file-name{font-size:15.5px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:6px}
-    .file-pin{font-size:12px}
     .file-person{font-size:12.5px;color:var(--mist)}
     .file-actions{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
     .file-actions a{font-size:13.5px;font-weight:600;color:var(--jade);text-decoration:none;border-bottom:1px solid var(--jade-soft);white-space:nowrap}
@@ -758,9 +757,9 @@
   }
 
   // Files renderer: grouped by Category like Essentials, but each row is a
-  // document link rather than a label/value pair. Essential rows get a pin
-  // badge — offline access for those is handled by the Drive app's own
-  // "Available offline" feature (see the hint text below), not by this site.
+  // document link rather than a label/value pair. Offline access is handled
+  // by the Drive app's own "Available offline" feature (see the hint text
+  // below), not by this site.
   // An earlier version tried to cache Drive files in the browser itself via
   // a no-cors fetch; that reliably failed because the restricted-sharing
   // fetch runs unauthenticated on iOS (Safari blocks the cross-site auth
@@ -775,7 +774,6 @@
     const nameK = keys.find(k=>/name|title/i.test(k)) || keys[1] || keys[0];
     const personK = keys.find(k=>/person/i.test(k));
     const linkK = keys.find(k=>/link|url/i.test(k));
-    const essentialK = keys.find(k=>/essential/i.test(k));
     const noteK = keys.find(k=>/note/i.test(k));
 
     const CAT_ICON = {
@@ -796,11 +794,10 @@
       <div class="card">
         ${items.map(r=>{
           const link = linkK && r[linkK] || "";
-          const isEssential = essentialK && /^y/i.test(r[essentialK] || "");
           return `
           <div class="file-row">
             <div class="file-main">
-              <div class="file-name">${isEssential ? '<span class="file-pin" title="Essential — mark offline in the Drive app">📌</span>' : ""}${esc(r[nameK] || "")}</div>
+              <div class="file-name">${esc(r[nameK] || "")}</div>
               ${personK && r[personK] ? `<div class="file-person">${esc(r[personK])}</div>` : ""}
               ${noteK && r[noteK] ? `<div class="ref-note">${esc(r[noteK])}</div>` : ""}
             </div>
@@ -813,7 +810,7 @@
     </div>`;
     }).join("");
 
-    return `<p class="files-hint">📌 marks essential files (passport, boarding pass). For real offline access — images, PDFs, and spreadsheets alike — install the <strong>Google Drive app</strong>, sign in with the account this folder is shared with, then open each 📌 file once and tap ⋮ → <strong>Make available offline</strong>. That's a one-time, 2-minute setup per phone; after that it works with zero signal.</p>${body}`;
+    return `<p class="files-hint">For offline access on your phone: open the <strong>Google Drive app</strong>, sign in with the account this folder is shared with, then open a file once and tap ⋮ → <strong>Make available offline</strong>.</p>${body}`;
   }
 
   // ---------- renderers ----------
