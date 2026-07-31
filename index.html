@@ -471,18 +471,19 @@
      dated: "single" -> one date(+time) column drives status
             "range"  -> check-in/check-out columns drive status
             "none"   -> no status coloring (plain reference info)
-     group: which nav cluster this tab sits under (Plan/Do/Explore/Essentials)
+     group: which nav cluster this tab sits under (Travel/Do/Explore/Essentials)
      ============================================================= */
   const SHEET_ID = "14g3BlnqTN7z8lzcNlmtB9sPPDRKIY238NoLpiT8pels";
 
   const SECTIONS = [
-    { id:"tickets",   label:"Flights",    tab:"Tickets",     icon:"✈️", dated:"single", group:"Plan"    },
-    { id:"hotels",    label:"Stays",      tab:"Hotels",      icon:"🏨", dated:"range",  group:"Plan"    },
+    { id:"tickets",   label:"Flights",    tab:"Tickets",     icon:"✈️", dated:"single", group:"Travel"  },
+    { id:"hotels",    label:"Stays",      tab:"Hotels",      icon:"🏨", dated:"range",  group:"Travel"  },
     { id:"itinerary", label:"Itinerary",  tab:"Itinerary",   icon:"🗺️", render:"timeline", dated:"single", group:"Do" },
-    { id:"bookings",  label:"Activities", tab:"Bookings",    icon:"🎟️", dated:"single", group:"Do"      },
+    { id:"bookings",  label:"Activity Bookings", tab:"Bookings",    icon:"🎟️", dated:"single", group:"Do"      },
     { id:"food",      label:"Eat & Drink",tab:"Eat & Drink", icon:"🍜", dated:"single", group:"Explore" },
     { id:"events",    label:"Event info", tab:"Event Info",  icon:"📍", dated:"none",   group:"Explore" },
-    { id:"essentials",label:"Essentials", tab:"Essentials",  icon:"🛟", dated:"none",   group:"Essentials", render:"reference" },
+    { id:"contacts",  label:"Contacts",   tab:"Essentials",  icon:"🚨", dated:"none",   group:"Essentials", render:"reference", refBucket:"contact" },
+    { id:"info",      label:"Others",     tab:"Essentials",  icon:"💱", dated:"none",   group:"Essentials", render:"reference", refBucket:"info" },
     { id:"files",     label:"Files",      tab:"Files",       icon:"📁", dated:"none",   group:"Essentials", render:"files" },
   ];
   /* ===================== end config ===================== */
@@ -723,6 +724,19 @@
 
   // Reference renderer: for lookup-style tabs like Essentials — grouped by
   // Category, no dates/status, values auto-linkified (phone/address/url).
+  // The Essentials sheet tab is split across two tabs (Contacts / Info) by
+  // Category — phone-type categories go to Contacts, everything else (and
+  // any new category the family adds later) defaults to Info.
+  const CONTACT_CATEGORIES = ["emergency","embassy","hospital","hotel"];
+  function splitByCategory(rows, bucket){
+    if(!rows.length) return rows;
+    const catK = Object.keys(rows[0]).find(k=>/category/i.test(k)) || Object.keys(rows[0])[0];
+    return rows.filter(r=>{
+      const isContact = CONTACT_CATEGORIES.includes((r[catK]||"").trim().toLowerCase());
+      return bucket==="contact" ? isContact : !isContact;
+    });
+  }
+
   function renderReference(rows, sec){
     if(!rows.length) return emptyState(sec);
     const keys = Object.keys(rows[0]);
@@ -901,7 +915,8 @@
       const text = await res.text();
       if(!res.ok) throw new Error(`HTTP ${res.status} from Google — usually a sharing/permission issue, not a missing tab.`);
       if(!/setResponse/.test(text)) throw new Error(`Google didn't return sheet data (got a login/error page instead). Check the sheet is shared as "Anyone with the link — Viewer".`);
-      const { rows } = parseGviz(text);
+      let { rows } = parseGviz(text);
+      if(sec.refBucket) rows = splitByCategory(rows, sec.refBucket);
       SECTION_DATA[sec.id] = rows;                       // cache for the Overview
       el.innerHTML = sec.render==="timeline" ? renderTimeline(rows, sec)
               : sec.render==="reference" ? renderReference(rows, sec)
@@ -1142,7 +1157,7 @@
     // Explore / Essentials), row 2 (#subnav) shows only the active group's
     // section tabs. Keeps row 1 short enough to never need scrolling, even
     // as more sections get added within a group.
-    const GROUP_ICON = { Plan:"🧭", Do:"🗺️", Explore:"🍜", Essentials:"🛟" };
+    const GROUP_ICON = { Travel:"🧭", Do:"🗺️", Explore:"🍜", Essentials:"🛟" };
     GROUPS = [];
     NAV.forEach(s=>{
       const key = s.group || s.id;
