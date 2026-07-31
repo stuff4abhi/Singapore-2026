@@ -206,14 +206,15 @@
       background:var(--petrol);color:#fff;box-shadow:var(--shadow-sm);
     }
     nav button:focus-visible{outline:2px solid var(--jade);outline-offset:2px}
-    .nav-group-label{
-      flex:0 0 auto;display:flex;align-items:center;gap:8px;
-      font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
-      color:var(--mist);padding:0 2px 0 6px;align-self:stretch;
+    #subnav{
+      display:flex;gap:6px;overflow-x:auto;padding:0 16px 12px;
+      scrollbar-width:none;
     }
-    .nav-group-label::before{content:"";width:1px;align-self:center;height:18px;background:var(--line);margin-right:8px}
-    .nav-group-label:first-child::before{display:none}
-    .nav-group-label:first-child{padding-left:0}
+    #subnav::-webkit-scrollbar{display:none}
+    #subnav:empty{display:none}
+    #subnav button{font-size:12.5px;padding:6px 12px;background:var(--line-soft)}
+    #subnav button .ic{font-size:13px}
+    #subnav button.active{background:var(--jade);color:#fff;box-shadow:none}
 
     .legend{
       display:flex;gap:16px;flex-wrap:wrap;
@@ -441,9 +442,10 @@
 <div class="bar">
   <div class="bar-inner">
     <div class="nav-wrap" id="navWrap">
-      <nav id="nav" aria-label="Trip sections"></nav>
+      <nav id="nav" aria-label="Trip groups"></nav>
       <span class="nav-cue" aria-hidden="true">›</span>
     </div>
+    <nav id="subnav" aria-label="Trip sections"></nav>
     <div class="legend" aria-hidden="true">
       <span><i class="i-done"></i>Done</span>
       <span><i class="i-next"></i>Up next</span>
@@ -1081,12 +1083,35 @@
   }
 
   // ---------- tab switching ----------
+  // NAV: flat list of all activatable panels (Overview + SECTIONS).
+  // GROUPS: NAV bucketed by `group` (Overview becomes its own singleton
+  // group keyed by its own id, since it has no `group` field). Both are
+  // populated by boot() but read here, so declare them at module scope.
+  let NAV = [], GROUPS = [];
+
+  // Rebuilds the row-2 sub-tabs for the given group. Hidden entirely when
+  // the group has only one item (Overview) — nothing to sub-select.
+  function renderSubnav(groupKey, activeId){
+    const g = GROUPS.find(g=>g.key===groupKey);
+    const subnav = document.getElementById("subnav");
+    if(!g || g.items.length < 2){ subnav.innerHTML = ""; return; }
+    subnav.innerHTML = g.items.map(s=>
+      `<button type="button" data-id="${s.id}" class="${s.id===activeId?'active':''}"><span class="ic">${s.icon}</span>${esc(s.label)}</button>`
+    ).join("");
+  }
+
   function activate(id){
-    document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active", b.dataset.id===id));
+    const item = NAV.find(s=>s.id===id);
+    const groupKey = item && (item.group || item.id);
+    if(groupKey){
+      renderSubnav(groupKey, id);
+      document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("active", b.dataset.group===groupKey));
+      // keep the active group pill visible even if row 1 ever needs to scroll
+      const groupBtn = document.querySelector(`#nav button[data-group="${groupKey}"]`);
+      if(groupBtn && groupBtn.scrollIntoView) groupBtn.scrollIntoView({inline:"center", block:"nearest", behavior:"smooth"});
+    }
+    document.querySelectorAll("#subnav button").forEach(b=>b.classList.toggle("active", b.dataset.id===id));
     document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("is-active", p.id===id));
-    // keep the chosen tab visible even if it was off-screen
-    const btn = document.querySelector(`nav button[data-id="${id}"]`);
-    if(btn && btn.scrollIntoView) btn.scrollIntoView({inline:"center", block:"nearest", behavior:"smooth"});
   }
 
   // Toggle the left/right "more tabs" affordances based on scroll position.
@@ -1111,25 +1136,36 @@
     }
 
     // Overview is a virtual section (no sheet tab) shown first, ungrouped.
-    const NAV = [{ id:"overview", label:"Overview", icon:"✨", overview:true }, ...SECTIONS];
+    NAV = [{ id:"overview", label:"Overview", icon:"✨", overview:true }, ...SECTIONS];
 
-    // Build nav with a small group-label divider whenever the group changes,
-    // so the scrollable strip reads as clusters (Plan / Do / Explore / Essentials)
-    // rather than one flat run of buttons.
-    let lastGroup = null;
-    const navHTML = NAV.map((s,i)=>{
-      const divider = (s.group && s.group !== lastGroup)
-              ? `<span class="nav-group-label">${esc(s.group)}</span>` : "";
-      lastGroup = s.group || lastGroup;
-      return divider + `<button type="button" data-id="${s.id}" class="${i===0?'active':''}"><span class="ic">${s.icon}</span>${esc(s.label)}</button>`;
-    }).join("");
+    // Two-tier nav: row 1 is one pill per group (Overview / Plan / Do /
+    // Explore / Essentials), row 2 (#subnav) shows only the active group's
+    // section tabs. Keeps row 1 short enough to never need scrolling, even
+    // as more sections get added within a group.
+    const GROUP_ICON = { Plan:"🧭", Do:"🗺️", Explore:"🍜", Essentials:"🛟" };
+    GROUPS = [];
+    NAV.forEach(s=>{
+      const key = s.group || s.id;
+      let g = GROUPS.find(g=>g.key===key);
+      if(!g){ g = { key, label: s.group || s.label, icon: GROUP_ICON[s.group] || s.icon, items: [] }; GROUPS.push(g); }
+      g.items.push(s);
+    });
 
-    document.getElementById("nav").innerHTML = navHTML;
+    document.getElementById("nav").innerHTML = GROUPS.map((g,i)=>
+      `<button type="button" data-group="${g.key}" class="${i===0?'active':''}"><span class="ic">${g.icon}</span>${esc(g.label)}</button>`
+    ).join("");
     document.getElementById("nav").addEventListener("click", e=>{
+      const btn = e.target.closest("button[data-group]");
+      if(btn) activate(GROUPS.find(g=>g.key===btn.dataset.group).items[0].id);
+    });
+    document.getElementById("subnav").addEventListener("click", e=>{
       const btn = e.target.closest("button[data-id]");
       if(btn) activate(btn.dataset.id);
     });
-    // scroll-affordance cues
+    renderSubnav(GROUPS[0].key, GROUPS[0].items[0].id);
+
+    // scroll-affordance cues (row 1 only — defensive fallback for very
+    // narrow screens; 5 short pills should fit without scrolling in practice)
     const navEl = document.getElementById("nav");
     navEl.addEventListener("scroll", updateNavCues, {passive:true});
     window.addEventListener("resize", updateNavCues);
