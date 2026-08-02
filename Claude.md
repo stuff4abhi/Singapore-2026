@@ -97,7 +97,7 @@ No backend, no code editing, no API keys. One Google Sheet + one HTML file = sha
 Personal documents (passport/visa scans, tickets, hotel vouchers) used to be committed directly into this repo under `files/` — since this repo is served publicly via GitHub Pages, that leaked passport and visa scans to anyone with the site URL. Those files have been removed from the repo entirely and replaced with a **Files** tab in the Sheet:
 
 - **Schema:** `Category | Name | Person | Drive Link | Essential | Notes` — files live in a Google Drive folder shared in **restricted** mode (requires an authorized Google account, not "anyone with the link"). This is a deliberate departure from the original "anyone with link" idea, chosen for privacy.
-- **Rendering:** `renderFiles()` in `index.html` groups rows by Category, shows a 📌 badge for `Essential = Yes` rows, and always renders a plain "Open in Drive" link that works with zero JS dependency.
+- **Rendering:** `renderFiles()` in `index.html` groups rows by Category and always renders a plain "Open in Drive" link that works with zero JS dependency.
 - **Offline access: use the Google Drive app's own "Available offline," not in-site caching.** Three in-browser attempts to cache Drive files for offline use were tried and retired — see "Retired: in-browser offline pinning" below for why. The hint text under the Files tab tells each family member to install the Drive app, sign in with the account this folder is shared with, open each 📌 Essential file once, then tap ⋮ → **Make available offline**. This works identically for images, PDFs, and spreadsheets, is properly authenticated (so restricted sharing is preserved), and isn't subject to browser cache-eviction quirks (Safari clears Cache Storage after ~7 days of no interaction; the Drive app's own offline files aren't affected).
 - **Retired: in-browser offline pinning.** Do not re-attempt this without adding real OAuth first — three different serving mechanisms were tried (reading the response as a blob for a link, serving it via a service-worker proxy for a full navigation, serving it via a service-worker proxy for an `<img>` subresource) and all three failed, each in a different way, for the same root cause: the pinning fetch (`fetch(driveUrl, {mode:"no-cors", credentials:"include"})`) runs **unauthenticated** on iOS, because Safari's ITP blocks the cross-site Google auth cookie regardless of `credentials:"include"`. Since the target file is restricted (not "anyone with the link"), Drive's server almost certainly returned a login/permission HTML page instead of the actual file bytes — and because the fetch used `mode:"no-cors"`, the response is "opaque," so page script can never inspect what was actually cached to detect this. That's why each fix "worked" in isolation (fixed a real bug in *how* the cached response was served) while the underlying cached content was never the real file to begin with. The only way to get real, readable bytes from a restricted Drive file in a static site with no backend is a proper OAuth flow (Google Identity Services token model + Drive API v3, `drive.readonly` scope, Testing-mode consent screen with the family added as test users) — viable, but a real added scope (GCP project setup, ~150 lines, family clicks through an "unverified app" warning once) that hasn't been built. If revisited, do it that way, not by patching the no-cors approach further.
 - **PWA foundation shipped:** minimal `manifest.json` + `sw.js` at repo root (app-shell caching + installability only — the retired offline-file proxy route has been removed). The full `css/`+`js/` module refactor described below under "Recommended for scaling" has **not** been done and remains future work if the project grows further.
@@ -106,17 +106,26 @@ Personal documents (passport/visa scans, tickets, hotel vouchers) used to be com
 
 Two phases proposed, each incrementally adding capability while maintaining the static-site + free model:
 
-### Phase 2 — "Around You Now" — contextual discovery
+### Phase 2 — "Around You Now" — contextual discovery — full plan in [`phase2.md`](phase2.md)
 - Uses free OpenStreetMap Overpass API + Wikipedia GeoSearch (no keys, no cost)
 - Finds your current/next itinerary location, surfaces nearby cafés, attractions, landmarks within a configurable radius
 - Optional live GPS mode (with permission prompt) so it keys off actual position
-- Caches results for offline use
+- Caches results for offline use — via a small generic `localStorage` TTL helper Phase 3 should reuse
+- The Sheet has no coordinates, so this phase must resolve them: `Lat`/`Lng` columns → Plus Code (decoded in-page) → Nominatim, cached permanently to stay inside Nominatim's usage policy
+- Ships as a **Nearby** sub-tab under the existing Explore group; stays single-file, no `js/` refactor
 
 ### Phase 3 — Shared Trip Journal via Google Form
 - Family writes notes, uploads photos via a native Google Form (mobile-friendly, Drive upload built-in)
 - Form responses auto-append to a `Journal` sheet tab the site reads
 - Site renders a warm, chronological feed of memories — author, note, timestamp, photo gallery
 - You can moderate by editing/deleting rows; everything stays in your Sheet
+
+### Phase 4 — Share to Instagram — full plan in [`phase4.md`](phase4.md)
+- Each family member shares a journal entry to **their own** Instagram via the OS share sheet (no API, no tokens, no shared account)
+- Hard prerequisite: Phase 3 must ship first — there is no feed to post from
+- Instagram has no web publishing path for personal accounts, so edit/delete "sync" is local status tracking plus a nudge, never real sync
+- Do not fetch Drive photos into the share — that's the same pattern that failed in the retired offline-pinning work
+
 
 ### Foundation for these remaining phases: PWA + offline
 - A **minimal** service worker + manifest already ship as part of the Files feature above (app-shell caching + installability only) — this section is about the fuller version needed for Phases 2/3
