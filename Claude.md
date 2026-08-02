@@ -102,17 +102,20 @@ Personal documents (passport/visa scans, tickets, hotel vouchers) used to be com
 - **Retired: in-browser offline pinning.** Do not re-attempt this without adding real OAuth first — three different serving mechanisms were tried (reading the response as a blob for a link, serving it via a service-worker proxy for a full navigation, serving it via a service-worker proxy for an `<img>` subresource) and all three failed, each in a different way, for the same root cause: the pinning fetch (`fetch(driveUrl, {mode:"no-cors", credentials:"include"})`) runs **unauthenticated** on iOS, because Safari's ITP blocks the cross-site Google auth cookie regardless of `credentials:"include"`. Since the target file is restricted (not "anyone with the link"), Drive's server almost certainly returned a login/permission HTML page instead of the actual file bytes — and because the fetch used `mode:"no-cors"`, the response is "opaque," so page script can never inspect what was actually cached to detect this. That's why each fix "worked" in isolation (fixed a real bug in *how* the cached response was served) while the underlying cached content was never the real file to begin with. The only way to get real, readable bytes from a restricted Drive file in a static site with no backend is a proper OAuth flow (Google Identity Services token model + Drive API v3, `drive.readonly` scope, Testing-mode consent screen with the family added as test users) — viable, but a real added scope (GCP project setup, ~150 lines, family clicks through an "unverified app" warning once) that hasn't been built. If revisited, do it that way, not by patching the no-cors approach further.
 - **PWA foundation shipped:** minimal `manifest.json` + `sw.js` at repo root (app-shell caching + installability only — the retired offline-file proxy route has been removed). The full `css/`+`js/` module refactor described below under "Recommended for scaling" has **not** been done and remains future work if the project grows further.
 
-## Upgrade plan (parked for later)
+## Phase 2 — "Around You Now" (shipped)
 
-Two phases proposed, each incrementally adding capability while maintaining the static-site + free model:
+✅ **Contextual discovery** — full implementation details in [`phase2.md`](phase2.md)
+- **Nearby tab** (sub-tab under Explore) surfaces cafés, sights, practical amenities, transit, and shops within a 500m–2km radius
+- **Anchor resolution:** auto-picks your current/next itinerary location (3-hour "covering now" window) or lets you pick manually; GPS override available
+- **Coordinate resolution:** Lat/Lng columns → Plus Code (decode-only, with short-code recovery for `8QJ8+5W`-style codes) → Nominatim fallback, each cached permanently
+- **Places from Overpass:** per-category result caps (25 each), haversine distance sorting, privacy-rounded coordinates (3 decimal places to APIs, full precision for maps/distance)
+- **Bonus: Wikipedia stories** — collapsible "Stories nearby" block below the places list
+- **Offline-ready:** `localStorage` cache with stale fallback, eviction that protects geocodes, mirror fallback (3 public Overpass instances)
+- **Live-tested:** verified with real Overpass outages, plus-code cross-checked against Google's decoder, all features working at 390px and desktop
 
-### Phase 2 — "Around You Now" — contextual discovery — full plan in [`phase2.md`](phase2.md)
-- Uses free OpenStreetMap Overpass API + Wikipedia GeoSearch (no keys, no cost)
-- Finds your current/next itinerary location, surfaces nearby cafés, attractions, landmarks within a configurable radius
-- Optional live GPS mode (with permission prompt) so it keys off actual position
-- Caches results for offline use — via a small generic `localStorage` TTL helper Phase 3 should reuse
-- The Sheet has no coordinates, so this phase must resolve them: `Lat`/`Lng` columns → Plus Code (decoded in-page) → Nominatim, cached permanently to stay inside Nominatim's usage policy
-- Ships as a **Nearby** sub-tab under the existing Explore group; stays single-file, no `js/` refactor
+## Future phases (parked)
+
+Two more phases proposed to add more capability while maintaining the static-site + free model:
 
 ### Phase 3 — Shared Trip Journal via Google Form
 - Family writes notes, uploads photos via a native Google Form (mobile-friendly, Drive upload built-in)
@@ -127,26 +130,31 @@ Two phases proposed, each incrementally adding capability while maintaining the 
 - Do not fetch Drive photos into the share — that's the same pattern that failed in the retired offline-pinning work
 
 
-### Foundation for these remaining phases: PWA + offline
-- A **minimal** service worker + manifest already ship as part of the Files feature above (app-shell caching + installability only) — this section is about the fuller version needed for Phases 2/3
-- Refactor single file into organized modules (config, cache, sheets, sections, etc.) — still not done
-- Implement localStorage caching of Sheet data (all tabs, not just the app shell) so the site opens instantly and works fully offline
-- Show "Updated 2 min ago / offline — showing saved copy" timestamp for Sheet data freshness (the Files section already has its own narrower offline messaging; this would extend the idea site-wide)
+### Foundation for Phases 3/4: PWA + offline + refactor
+- A **minimal** service worker + manifest already ship as part of the Files feature (app-shell caching + installability only)
+- Refactor single file into organized modules (config.js, cache.js, nearby.js, journal.js, etc.) — still not done, but Phase 2 proves it's structurally feasible
+- Implement localStorage caching of Sheet data (all tabs, not just the app shell) so the site opens instantly and works fully offline — Phase 2 has this for Overpass/Wikipedia, good foundation to extend
+- Show "Updated 2 min ago / offline — showing saved copy" timestamp for Sheet data freshness (Files and Nearby sections already have narrower offline messaging; this would extend site-wide)
 - Makes travel truly work — bad hotel wifi? App opens instantly and works anyway
 
 ---
 
 ## Architecture & structure
 
-**Current (Phase 0 — what's live now):**
+**Current (Phase 0 + Phase 2 — what's live now):**
 ```
-index.html (single file, ~950 lines)
-├── inline CSS (design system)
+index.html (single file, ~1650 lines)
+├── inline CSS (design system + Nearby UI)
 ├── inline JavaScript
-└── inline HTML (markup shell)
+│   ├── cache helper (localStorage + stale fallback)
+│   ├── OLC Plus Code decoder (decode-only)
+│   ├── Overpass/Wikipedia fetchers (mirror fallback, 3 instances)
+│   ├── anchor resolution (itinerary/GPS/manual picker)
+│   └── haversine distance + card rendering
+└── inline HTML (markup shell + Nearby panel)
 ```
 
-**Recommended for scaling (if Phase 0 refactor is done):**
+**Recommended for scaling (if Phase 3/4 is added and js/ refactor is done):**
 ```
 singapore-2026/
 ├── index.html          ← markup shell only
@@ -159,9 +167,9 @@ singapore-2026/
     ├── sheet.js        ← gviz fetch/parse (cache-aware)
     ├── sections.js     ← renderers (tickets, hotels, etc.)
     ├── overview.js     ← countdown/up-next/today
-    ├── files.js        ← Phase 1
-    ├── nearby.js       ← Phase 2
-    ├── journal.js      ← Phase 3
+    ├── files.js        ← Phase 1 (Files tab)
+    ├── nearby.js       ← Phase 2 (Nearby tab) — extractable, but working inline now
+    ├── journal.js      ← Phase 3 (future)
     └── app.js          ← boot, nav, routing
 ```
 
@@ -195,6 +203,7 @@ Anyone could screenshot the entire plan and know exactly where you are, when, wi
 ✅ Live refresh (family edits Sheet → site updates on next open)  
 ✅ Graceful fallbacks (no spinners, no broken states)  
 ✅ One shareable link gets everyone on the same page  
+✅ **Phase 2: Nearby places** (cafés, sights, transit within walking distance)  
 
 ---
 
