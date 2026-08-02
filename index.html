@@ -1466,12 +1466,28 @@
     const hours = p.tags.opening_hours ? esc(p.tags.opening_hours) : ""; // verbatim — never parsed/evaluated as "open now"
     const phone = p.tags.phone || p.tags["contact:phone"] || "";
     const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.lat)},${encodeURIComponent(p.lon)}&travelmode=walking`;
+
+    // Generate description from OSM tags or derive from place type
+    let description = p.tags.description || "";
+    if(!description){
+      const types = [];
+      if(p.tags.tourism) types.push(p.tags.tourism.replace(/_/g, " "));
+      if(p.tags.amenity) types.push(p.tags.amenity.replace(/_/g, " "));
+      if(p.tags.shop) types.push(p.tags.shop.replace(/_/g, " "));
+      if(p.tags.railway) types.push((p.tags.railway === "station" ? "Train station" : p.tags.railway).replace(/_/g, " "));
+      if(p.tags.station) types.push((p.tags.station === "subway" ? "Subway" : p.tags.station).replace(/_/g, " "));
+      if(p.tags.highway === "bus_stop") types.push("Bus stop");
+      if(p.tags.historic) types.push(p.tags.historic.replace(/_/g, " "));
+      description = types.join(" • ");
+    }
+
     const dl = [];
     if(cuisine) dl.push(`<dt>Cuisine</dt><dd>${cuisine}</dd>`);
     if(hours) dl.push(`<dt>Hours</dt><dd>${hours}</dd>`);
     if(phone) dl.push(`<dt>Phone</dt><dd><a href="tel:${esc(phone.replace(/[^\d+]/g,''))}">${esc(phone)}</a></dd>`);
     return `<article class="card">
       <div class="card-top"><h3 class="card-title">${esc(p.name)}</h3><span class="near-dist">${esc(walkLabel(p.dist))}</span></div>
+      ${description?`<div style="font-size:13px;color:var(--ink-soft);margin-bottom:10px">${esc(description)}</div>`:""}
       ${dl.length?`<dl class="rows">${dl.join("")}</dl>`:""}
       <div class="note"><a href="${mapsUrl}" target="_blank" rel="noopener">Walk there ↗</a></div>
     </article>`;
