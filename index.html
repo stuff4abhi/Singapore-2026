@@ -406,6 +406,27 @@
       font-family:'Fraunces',serif;font-size:14px;color:var(--ink-soft);margin-bottom:6px;
     }
 
+    /* ---------- Nearby (Phase 2) ---------- */
+    .near-anchor{margin-bottom:14px}
+    .near-anchor-label{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:8px}
+    .near-anchor-label span{color:var(--jade)}
+    .near-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .near-controls select{font:inherit;font-size:13px;padding:7px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);max-width:100%}
+    .near-gps-btn{font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:7px 12px;border-radius:10px;border:1px solid var(--line);background:var(--jade-soft);color:var(--jade)}
+    .near-gps-btn:disabled{opacity:.6;cursor:default}
+    .chip-row{display:flex;gap:7px;flex-wrap:wrap;margin:14px 0}
+    .chip{font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:7px 13px;border-radius:999px;border:1px solid var(--line);background:var(--line-soft);color:var(--ink-soft)}
+    .chip[aria-pressed="true"]{background:var(--jade);color:#fff;border-color:var(--jade)}
+    .near-radius{display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:13px;color:var(--ink-soft)}
+    .near-radius select{font:inherit;font-size:13px;padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+    .near-dist{font-size:12px;font-weight:600;color:var(--jade);white-space:nowrap}
+    .near-offline-banner{font-size:12.5px;color:var(--next);background:var(--next-soft);border-radius:var(--radius-sm);padding:9px 13px;margin-bottom:12px}
+    .near-stories{margin-top:6px}
+    .near-stories summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--ink);padding:8px 2px;list-style:none}
+    .near-stories summary::-webkit-details-marker{display:none}
+    .near-stories summary::before{content:"▸ ";color:var(--jade)}
+    .near-stories[open] summary::before{content:"▾ "}
+
     @media (prefers-reduced-motion:reduce){
       *{animation:none!important;scroll-behavior:auto;transition:none!important}
     }
@@ -482,6 +503,7 @@
     { id:"bookings",  label:"Activity Bookings", tab:"Bookings",    icon:"🎟️", dated:"single", group:"Do"      },
     { id:"food",      label:"Eat & Drink",tab:"Eat & Drink", icon:"🍜", dated:"single", group:"Explore" },
     { id:"events",    label:"Event info", tab:"Event Info",  icon:"📍", dated:"none",   group:"Explore" },
+    { id:"nearby",    label:"Nearby",     icon:"📌", dated:"none", group:"Explore", virtual:true },
     { id:"contacts",  label:"Contacts",   tab:"Essentials",  icon:"🚨", dated:"none",   group:"Essentials", render:"reference", refBucket:"contact" },
     { id:"info",      label:"Others",     tab:"Essentials",  icon:"🗒️", dated:"none",   group:"Essentials", render:"reference", refBucket:"info" },
     { id:"files",     label:"Files",      tab:"Files",       icon:"📁", dated:"none",   group:"Essentials", render:"files" },
@@ -547,6 +569,61 @@
   }
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+  // ---------- cache helper (Phase 2) ----------
+  // Generic localStorage TTL cache. Envelope {v, exp, ts}: `ts` (insertion
+  // time) drives eviction since `exp` alone can't (geocodes never expire).
+  // cacheGet distinguishes "never cached" (null) from "cached but stale"
+  // ({value, stale:true}) so callers can serve a stale offline fallback —
+  // a bare value|null return can't express that difference.
+  // localStorage can throw SecurityError (not just QuotaExceededError) in
+  // some browsers/embeds; both reads and writes degrade to an in-memory Map
+  // for the session rather than crashing.
+  const CACHE_PREFIX = "sg2026:";
+  let memCache = null;
+  function cacheRead(key){
+    if(memCache) return memCache.has(key) ? memCache.get(key) : null;
+    try{ return localStorage.getItem(key); }
+    catch(err){ memCache = new Map(); return null; }
+  }
+  function evictOldestCacheEntries(){
+    try{
+      const entries = [];
+      for(let i=0;i<localStorage.length;i++){
+        const k = localStorage.key(i);
+        if(!k || !k.startsWith(CACHE_PREFIX) || k.startsWith(CACHE_PREFIX+"geo:")) continue; // geocodes are a compliance mechanism — never evict
+        let ts = 0;
+        try{ ts = JSON.parse(localStorage.getItem(k)).ts || 0; }catch(e){ /* keep ts=0, evicted first */ }
+        entries.push({ k, ts });
+      }
+      entries.sort((a,b)=>a.ts-b.ts);
+      entries.slice(0, Math.max(1, Math.ceil(entries.length/4))).forEach(e=>localStorage.removeItem(e.k));
+    }catch(err){ /* localStorage itself unavailable — the retry below will fail too and we degrade to memory */ }
+  }
+  function cacheWrite(key, value){
+    if(memCache){ memCache.set(key, value); return; }
+    try{ localStorage.setItem(key, value); }
+    catch(err){
+      if(err && err.name === "QuotaExceededError"){
+        evictOldestCacheEntries();
+        try{ localStorage.setItem(key, value); return; }catch(e2){ /* still full — degrade below */ }
+      }
+      memCache = new Map();
+      memCache.set(key, value);
+    }
+  }
+  function cacheSet(key, value, ttlMs){
+    const env = { v: value, exp: ttlMs==null ? null : Date.now()+ttlMs, ts: Date.now() };
+    cacheWrite(CACHE_PREFIX+key, JSON.stringify(env));
+  }
+  function cacheGet(key){ // -> {value, stale} | null (null only if never cached)
+    const raw = cacheRead(CACHE_PREFIX+key);
+    if(raw==null) return null;
+    let env;
+    try{ env = JSON.parse(raw); }catch(e){ return null; }
+    const stale = env.exp != null && Date.now() > env.exp;
+    return { value: env.v, stale };
+  }
 
   // ---------- date / time parsing ----------
   function parseDateLoose(s){
@@ -968,7 +1045,7 @@
         const tKey = titleKey(r);
         const locK = Object.keys(r).find(k=>/location|venue|place|address|from.?to/i.test(k));
         out.push({
-          section: sec, dt, endDt,
+          section: sec, row: r, dt, endDt,
           title: r[tKey] || sec.label,
           time: (timeKey(r) && r[timeKey(r)]) || "",
           loc: (locK && r[locK]) || "",
@@ -1072,7 +1149,7 @@
     }
 
     // --- 4. Quick counts + jump links ---
-    const countable = SECTIONS.filter(s=>s.id!=="overview");
+    const countable = SECTIONS.filter(s=>s.id!=="overview" && !s.virtual);
     const tilesHTML = `
     <p class="ov-block-label">Everything in this trip</p>
     <div class="ov-counts">
@@ -1095,6 +1172,496 @@
     el.querySelectorAll("[data-goto]").forEach(a=>{
       a.addEventListener("click", e=>{ e.preventDefault(); activate(a.dataset.goto); window.scrollTo({top:0,behavior:"smooth"}); });
     });
+  }
+
+  // ============================================================
+  // PHASE 2 — "Around You Now" (Nearby tab)
+  // See phase2.md for the full design. This section is self-contained;
+  // it only reaches into the rest of the file via collectDatedItems(),
+  // SECTION_DATA, checkinKey/checkoutKey/titleKey/parseDateLoose, esc(),
+  // smartValue() and the cache helper defined above.
+  // ============================================================
+
+  // ---------- categories: single source of truth for chips + Overpass ----------
+  const CATEGORIES = {
+    eat:       { label:"Eat",       icon:"🍜", default:true,  clauses:['amenity~"^(restaurant|fast_food|food_court)$"','shop=bakery'] },
+    coffee:    { label:"Coffee",    icon:"☕", default:false, clauses:['amenity=cafe','shop=coffee'] },
+    sights:    { label:"Sights",    icon:"🏛", default:true,  clauses:['tourism~"^(attraction|museum|artwork|viewpoint)$"','historic~"^(monument|memorial|ruins|castle|temple|archaeological_site)$"'] },
+    shops:     { label:"Shops",     icon:"🛍", default:false, clauses:['shop~"^(mall|department_store|supermarket)$"'] },
+    practical: { label:"Practical", icon:"🚻", default:false, clauses:['amenity~"^(toilets|atm|pharmacy|drinking_water)$"','shop=convenience'] },
+    transit:   { label:"Transit",   icon:"🚇", default:false, clauses:['railway=station','station=subway','highway=bus_stop'] },
+  };
+
+  // ---------- Plus Code (Open Location Code) — decode-only ----------
+  // OLC chars before "+" always come in pairs; a bare {4,8} would also
+  // accept malformed 5-/7-char prefixes that decode to a plausible-but-wrong
+  // point, so the alphabet is grouped in pairs here too.
+  const PLUS_CODE_RE = /\b(?:[23456789CFGHJMPQRVWX]{2}){2,4}\+[23456789CFGHJMPQRVWX]{2,3}\b/i;
+  const OLC_ALPHABET = "23456789CFGHJMPQRVWX";
+  const OLC_SEP_POS = 8;
+  const OLC_PAIR_RES = [20, 1, 0.05, 0.0025, 0.000125];
+  const SG_REF = { lat: 1.3521, lon: 103.8198 }; // central Singapore — short-code recovery reference
+
+  function olcDecodePairs(digits){
+    let lat = -90, lon = -180;
+    for(let i=0;i<digits.length;i+=2){
+      const res = OLC_PAIR_RES[i/2];
+      lat += digits[i]*res;
+      if(digits[i+1]!=null) lon += digits[i+1]*res;
+    }
+    const lastRes = OLC_PAIR_RES[Math.floor((digits.length-1)/2)];
+    return { lat: lat+lastRes/2, lon: lon+lastRes/2 };
+  }
+  function decodeFullOLC(code){
+    const digits = code.replace("+","").toUpperCase().split("")
+            .map(c=>OLC_ALPHABET.indexOf(c)).filter(i=>i>=0).slice(0,10);
+    if(digits.length<2 || digits.length%2!==0) return null; // parity check
+    return olcDecodePairs(digits);
+  }
+  // Short codes (e.g. "8QJ8+5W") drop leading, most-significant pairs; they
+  // must be recovered relative to a known nearby point. Singapore straddles
+  // the 103°/104° longitude cell boundary, so this recovers from a reference
+  // point rather than assuming a fixed prefix (which would break for Changi
+  // and the east coast).
+  function recoverNearestOLC(shortCode, refLat, refLon){
+    const plusIdx = shortCode.indexOf("+");
+    if(plusIdx<0) return null;
+    if(plusIdx>=OLC_SEP_POS) return decodeFullOLC(shortCode);
+    const missing = OLC_SEP_POS-plusIdx;
+    if(missing%2!==0) return null;
+    const resIdx = missing/2-1;
+    let latRemainder = refLat+90, lonRemainder = refLon+180, prefix = "";
+    for(let p=0;p<=resIdx;p++){
+      const res = OLC_PAIR_RES[p];
+      const latDigit = Math.floor(latRemainder/res), lonDigit = Math.floor(lonRemainder/res);
+      latRemainder -= latDigit*res; lonRemainder -= lonDigit*res;
+      prefix += OLC_ALPHABET[latDigit]+OLC_ALPHABET[lonDigit];
+    }
+    const decoded = decodeFullOLC(prefix+shortCode.replace("+",""));
+    if(!decoded) return null;
+    const unit = OLC_PAIR_RES[resIdx];
+    let { lat, lon } = decoded;
+    // If the recovered point lands more than half a resolution-unit from the
+    // reference, the guessed prefix was the wrong adjacent cell — nudge once.
+    if(Math.abs(lat-refLat)>unit/2) lat += (lat>refLat ? -unit : unit);
+    if(Math.abs(lon-refLon)>unit/2) lon += (lon>refLon ? -unit : unit);
+    return { lat, lon };
+  }
+  function decodePlusCode(rawCode){
+    try{
+      const cleaned = String(rawCode).toUpperCase().replace(/\s*SINGAPORE\s*$/i,"").trim();
+      const match = cleaned.match(PLUS_CODE_RE);
+      if(!match) return null;
+      const code = match[0].toUpperCase();
+      const plusIdx = code.indexOf("+");
+      const decoded = plusIdx>=OLC_SEP_POS ? decodeFullOLC(code) : recoverNearestOLC(code, SG_REF.lat, SG_REF.lon);
+      if(!decoded || isNaN(decoded.lat) || isNaN(decoded.lon)) return null;
+      // Sanity bound to the Singapore region — a decode that lands outside it
+      // is a bad decode, not a real "plausible but wrong" point worth keeping.
+      if(decoded.lat<1.1 || decoded.lat>1.5 || decoded.lon<103.5 || decoded.lon>104.1) return null;
+      return decoded;
+    }catch(err){ return null; }
+  }
+
+  // ---------- geometry / formatting ----------
+  function haversineMeters(lat1,lon1,lat2,lon2){
+    const R = 6371000, toRad = d=>d*Math.PI/180;
+    const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return R * 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+  function walkLabel(meters){
+    const mins = Math.max(1, Math.round(meters/80));
+    const dist = meters<950 ? `${Math.round(meters/10)*10} m` : `${(meters/1000).toFixed(1)} km`;
+    return `${dist} · ${mins} min walk`;
+  }
+  // Privacy: round only the copy sent to third parties (Overpass/Wikipedia
+  // query params). Haversine sorting and the Walk-there link use the
+  // full-precision anchor so the destination never mismatches the venue.
+  function roundForAPI(v){ return Math.round(v*1000)/1000; }
+
+  // ---------- coordinate resolution ----------
+  function findLatLngInRow(row){
+    if(!row) return null;
+    const keys = Object.keys(row);
+    const latK = keys.find(k=>/^lat/i.test(k));
+    const lngK = keys.find(k=>/^(lng|lon)/i.test(k));
+    if(!latK || !lngK) return null;
+    const lat = parseFloat(row[latK]), lon = parseFloat(row[lngK]);
+    return (isNaN(lat)||isNaN(lon)) ? null : { lat, lon };
+  }
+  function findPlusCodeColumn(row){
+    if(!row) return null;
+    const k = Object.keys(row).find(k=>/plus.?code|olc/i.test(k));
+    return k ? row[k] : null;
+  }
+  let lastNominatimCall = 0;
+  async function geocodeNominatim(query){
+    const cacheKey = "geo:"+query.toLowerCase().trim();
+    const cached = cacheGet(cacheKey);
+    if(cached) return cached.value; // permanent cache — compliance mechanism, not a perf optimisation
+
+    const wait = Math.max(0, 1000-(Date.now()-lastNominatimCall));
+    if(wait>0) await new Promise(r=>setTimeout(r, wait));
+    lastNominatimCall = Date.now();
+
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=sg&q=${encodeURIComponent(query)}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const arr = await res.json();
+    if(!arr.length) return null;
+    const result = { lat: parseFloat(arr[0].lat), lon: parseFloat(arr[0].lon), label: arr[0].display_name };
+    cacheSet(cacheKey, result, null); // no expiry
+    return result;
+  }
+  // Text -> coordinates, first hit wins: Lat/Lng columns, then Plus Code
+  // (column or inline in the location text), then Nominatim.
+  async function resolveCoordinatesForItem(item){
+    const direct = findLatLngInRow(item.row);
+    if(direct) return { ...direct, label: item.loc || item.title, source:"sheet" };
+
+    const plusCol = findPlusCodeColumn(item.row);
+    const plusInline = item.loc && item.loc.match(PLUS_CODE_RE);
+    const plusRaw = plusCol || (plusInline && plusInline[0]);
+    if(plusRaw){
+      const decoded = decodePlusCode(plusRaw);
+      if(decoded) return { ...decoded, label: item.loc || item.title, source:"pluscode" };
+      // invalid/malformed Plus Code — fall through to Nominatim rather than
+      // returning a plausible-but-wrong point
+    }
+
+    if(!item.loc) return null;
+    try{
+      const q = /singapore/i.test(item.loc) ? item.loc : `${item.loc}, Singapore`;
+      const result = await geocodeNominatim(q);
+      return result ? { lat:result.lat, lon:result.lon, label:result.label, source:"nominatim" } : null;
+    }catch(err){
+      console.warn("Nominatim geocode failed:", err.message);
+      return null;
+    }
+  }
+
+  // ---------- anchor: "where is here?" ----------
+  // endDt only exists for dated:"range" sections (hotels); every itinerary
+  // row is dated:"single", so there is no endDt to test "covering now"
+  // against — hence the explicit 3h window below instead.
+  function pickAnchorItem(now){
+    const items = collectDatedItems().filter(i=>i.section.id==="itinerary");
+    const past = items.filter(i=>i.dt.getTime() <= now.getTime());
+    const recent = past.length ? past[past.length-1] : null;
+    if(recent && (now.getTime()-recent.dt.getTime()) <= 3*3600*1000) return recent;
+    const future = items.find(i=>i.dt.getTime() > now.getTime());
+    if(future) return future;
+    // Nothing current/upcoming — fall back to whichever hotel stay covers
+    // today. Hotels have a real endDt, so "which stay covers today" is
+    // answerable, and it's a better default than the empty state.
+    const hotelRows = SECTION_DATA["hotels"] || [];
+    for(const r of hotelRows){
+      const start = parseDateLoose(checkinKey(r) && r[checkinKey(r)]);
+      const end = parseDateLoose(checkoutKey(r) && r[checkoutKey(r)]);
+      if(start && start.getTime()<=now.getTime() && (!end || now.getTime()<=end.getTime())){
+        const locK = Object.keys(r).find(k=>/address|venue|location|hotel/i.test(k));
+        return { section: SECTIONS.find(s=>s.id==="hotels"), row:r, dt:start, endDt:end,
+          title: r[titleKey(r)]||"Hotel", time:"", loc:(locK&&r[locK])||"", locKey:locK||"" };
+      }
+    }
+    return null;
+  }
+  async function buildAnchorFromItem(item){
+    const coords = await resolveCoordinatesForItem(item);
+    if(!coords) return null;
+    return { lat:coords.lat, lon:coords.lon, label: coords.label || item.title, source: coords.source };
+  }
+  // Manual picker and GPS are explicit user overrides — whichever the user
+  // touched most recently wins over the automatic itinerary/hotel anchor.
+  // GPS is opt-in behind an explicit tap and never auto-prompts.
+  const NEARBY_STATE = {
+    anchor: null,
+    categories: new Set(Object.keys(CATEGORIES).filter(k=>CATEGORIES[k].default)),
+    radius: 1000,
+    gps: null,
+    manualItem: null,
+    overrideSource: null, // "gps" | "manual" | null
+  };
+  async function resolveAnchor(){
+    if(NEARBY_STATE.overrideSource==="manual" && NEARBY_STATE.manualItem) return buildAnchorFromItem(NEARBY_STATE.manualItem);
+    if(NEARBY_STATE.overrideSource==="gps" && NEARBY_STATE.gps) return { lat:NEARBY_STATE.gps.lat, lon:NEARBY_STATE.gps.lon, label:"Your location", source:"gps" };
+    const item = pickAnchorItem(new Date());
+    if(item) return buildAnchorFromItem(item);
+    return null;
+  }
+  function distinctLocations(){
+    const items = collectDatedItems().filter(i=>i.section.id==="itinerary" && i.loc);
+    const seen = new Map();
+    items.forEach(i=>{ if(!seen.has(i.loc)) seen.set(i.loc, i); });
+    return [...seen.values()];
+  }
+
+  // ---------- Overpass (places) ----------
+  const OVERPASS_MIRRORS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+  ];
+  function buildOverpassQuery(lat, lon, radiusM, catKeys){
+    const perClauseCap = 25;
+    const lines = [];
+    catKeys.forEach(key=>{
+      const cat = CATEGORIES[key];
+      if(!cat) return;
+      cat.clauses.forEach(clause=>{
+        lines.push(`nwr(around:${radiusM},${lat},${lon})[${clause}][name];out center tags ${perClauseCap};`);
+      });
+    });
+    return `[out:json][timeout:25];\n${lines.join("\n")}`;
+  }
+  // Overpass's most common failure is HTTP 200 with an error in the body
+  // (a "remark" field) — a status-code check alone would treat that as a
+  // valid empty result and cache it. fetch() has no timeout option, so
+  // [timeout:25] (server-side only) is backed by a real AbortController.
+  async function fetchOverpassOnce(url, query, timeoutMs){
+    const ctrl = new AbortController();
+    const timer = setTimeout(()=>ctrl.abort(), timeoutMs);
+    try{
+      const res = await fetch(url, { method:"POST", body:query, signal:ctrl.signal });
+      const text = await res.text();
+      if(!res.ok) throw new Error(`HTTP ${res.status}`);
+      let json;
+      try{ json = JSON.parse(text); }catch(e){ throw new Error("Bad JSON from Overpass"); }
+      if(json.remark && /error|timed out/i.test(json.remark)) throw new Error("Overpass remark: "+json.remark);
+      return json;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  async function fetchOverpass(query){
+    let lastErr;
+    for(const url of OVERPASS_MIRRORS){
+      // Timeout, HTTP failure, remark-carried failure, and a CORS/dropped
+      // connection (surfaces as TypeError) all fall through to the next
+      // mirror the same way — none of them get cached.
+      try{ return await fetchOverpassOnce(url, query, 25000); }
+      catch(err){ lastErr = err; }
+    }
+    throw lastErr || new Error("All Overpass mirrors failed");
+  }
+  function normalizeOverpassElements(json, anchor){
+    const seen = new Set(), places = [];
+    (json.elements||[]).forEach(el=>{
+      const tags = el.tags || {};
+      if(!tags.name) return;
+      const lat = el.lat ?? (el.center && el.center.lat);
+      const lon = el.lon ?? (el.center && el.center.lon);
+      if(lat==null || lon==null) return;
+      const key = `${el.type}/${el.id}`;
+      if(seen.has(key)) return;
+      seen.add(key);
+      places.push({ name:tags.name, lat, lon, dist:haversineMeters(anchor.lat,anchor.lon,lat,lon), tags });
+    });
+    places.sort((a,b)=>a.dist-b.dist);
+    return places;
+  }
+  function renderPlaceCard(p){
+    const cuisine = p.tags.cuisine ? esc(p.tags.cuisine.replace(/_/g," ")) : "";
+    const hours = p.tags.opening_hours ? esc(p.tags.opening_hours) : ""; // verbatim — never parsed/evaluated as "open now"
+    const phone = p.tags.phone || p.tags["contact:phone"] || "";
+    const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.lat)},${encodeURIComponent(p.lon)}&travelmode=walking`;
+    const dl = [];
+    if(cuisine) dl.push(`<dt>Cuisine</dt><dd>${cuisine}</dd>`);
+    if(hours) dl.push(`<dt>Hours</dt><dd>${hours}</dd>`);
+    if(phone) dl.push(`<dt>Phone</dt><dd><a href="tel:${esc(phone.replace(/[^\d+]/g,''))}">${esc(phone)}</a></dd>`);
+    return `<article class="card">
+      <div class="card-top"><h3 class="card-title">${esc(p.name)}</h3><span class="near-dist">${esc(walkLabel(p.dist))}</span></div>
+      ${dl.length?`<dl class="rows">${dl.join("")}</dl>`:""}
+      <div class="note"><a href="${mapsUrl}" target="_blank" rel="noopener">Walk there ↗</a></div>
+    </article>`;
+  }
+
+  // ---------- Wikipedia (stories nearby) — bonus layer, fails silently ----------
+  async function fetchWikipediaStories(anchor){
+    const lat = roundForAPI(anchor.lat), lon = roundForAPI(anchor.lon);
+    const url = `https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*`
+            + `&generator=geosearch&ggscoord=${lat}|${lon}&ggsradius=1000&ggslimit=10`
+            + `&prop=extracts|pageimages&exintro=1&explaintext=1&exsentences=2`
+            + `&exlimit=10&pilimit=10&piprop=thumbnail&pithumbsize=120`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const json = await res.json();
+    const pages = json.query && json.query.pages ? Object.values(json.query.pages) : [];
+    return pages.map(p=>({
+      title: p.title || "",
+      extract: (p.extract||"").split(/(?<=[.!?])\s/).slice(0,2).join(" "), // exsentences is best-effort; truncate client-side as a backstop
+      url: `https://en.wikipedia.org/wiki/${encodeURIComponent((p.title||"").replace(/ /g,"_"))}`,
+    })).filter(p=>p.extract);
+  }
+  function renderStories(stories){
+    if(!stories.length) return "";
+    return `<details class="near-stories">
+      <summary>📖 Stories nearby</summary>
+      ${stories.map(s=>`<div class="card">
+        <div class="card-top"><h3 class="card-title">${esc(s.title)}</h3></div>
+        <div class="note">${esc(s.extract)} <a href="${esc(s.url)}" target="_blank" rel="noopener">Read more ↗</a></div>
+      </div>`).join("")}
+    </details>`;
+  }
+
+  // ---------- UI shell + wiring ----------
+  function nearbyShellHTML(){
+    const chips = Object.entries(CATEGORIES).map(([key,cat])=>
+            `<button type="button" class="chip" data-cat="${key}" aria-pressed="${cat.default?'true':'false'}">${cat.icon} ${esc(cat.label)}</button>`
+    ).join("");
+    return `
+    <div class="near-anchor" id="nearAnchor">
+      <div class="near-anchor-label">📍 Near <span id="nearAnchorText">…</span></div>
+      <div class="near-controls">
+        <select id="nearLocPicker" aria-label="Choose a location"><option value="">Choose a location…</option></select>
+        <button type="button" id="nearGpsBtn" class="near-gps-btn">📍 Use my location</button>
+      </div>
+    </div>
+    <div class="chip-row" id="nearCatChips" role="group" aria-label="Categories">${chips}</div>
+    <div class="near-radius">
+      <label for="nearRadius">Radius</label>
+      <select id="nearRadius" aria-label="Search radius">
+        <option value="500">500 m</option>
+        <option value="1000" selected>1 km</option>
+        <option value="2000">2 km (best-effort)</option>
+      </select>
+    </div>
+    <div id="nearResults" aria-live="polite"><div class="state">Open this tab to load nearby places.</div></div>
+    <div id="nearStories"></div>`;
+  }
+  function populateLocationPicker(){
+    const picker = document.getElementById("nearLocPicker");
+    if(!picker) return;
+    const current = picker.value;
+    const items = distinctLocations();
+    picker.innerHTML = `<option value="">Choose a location…</option>` +
+            items.map(i=>`<option value="${esc(i.loc)}">${esc(i.loc)}</option>`).join("");
+    if(current) picker.value = current;
+  }
+  function wireNearbyUI(){
+    const chipRow = document.getElementById("nearCatChips");
+    if(chipRow) chipRow.addEventListener("click", e=>{
+      const btn = e.target.closest("button[data-cat]");
+      if(!btn) return;
+      const active = NEARBY_STATE.categories.has(btn.dataset.cat);
+      if(active) NEARBY_STATE.categories.delete(btn.dataset.cat); else NEARBY_STATE.categories.add(btn.dataset.cat);
+      btn.setAttribute("aria-pressed", String(!active));
+      refreshNearbyResults(false);
+    });
+    const radiusSel = document.getElementById("nearRadius");
+    if(radiusSel) radiusSel.addEventListener("change", ()=>{
+      NEARBY_STATE.radius = parseInt(radiusSel.value,10);
+      refreshNearbyResults(false);
+    });
+    const gpsBtn = document.getElementById("nearGpsBtn");
+    if(gpsBtn) gpsBtn.addEventListener("click", ()=>{
+      if(!("geolocation" in navigator)) return;
+      gpsBtn.disabled = true; gpsBtn.textContent = "Locating…";
+      navigator.geolocation.getCurrentPosition(pos=>{
+        NEARBY_STATE.gps = { lat:pos.coords.latitude, lon:pos.coords.longitude };
+        NEARBY_STATE.overrideSource = "gps";
+        gpsBtn.disabled = false; gpsBtn.textContent = "📍 Use my location";
+        refreshNearbyResults(true);
+      }, err=>{
+        gpsBtn.disabled = false; gpsBtn.textContent = "📍 Use my location";
+        console.warn("GPS denied/unavailable:", err.message);
+      }, { timeout:10000 });
+    });
+    const picker = document.getElementById("nearLocPicker");
+    if(picker) picker.addEventListener("change", ()=>{
+      if(!picker.value){ NEARBY_STATE.manualItem = null; NEARBY_STATE.overrideSource = null; }
+      else{
+        NEARBY_STATE.manualItem = distinctLocations().find(i=>i.loc===picker.value) || null;
+        NEARBY_STATE.overrideSource = "manual";
+      }
+      refreshNearbyResults(true);
+    });
+  }
+
+  // First open of the tab: populate the picker (itinerary data has loaded
+  // by now), resolve the anchor with a fresh Date(), and fire the first
+  // query. Also called on every subsequent activate("nearby").
+  async function onActivateNearby(){
+    populateLocationPicker();
+    await refreshNearbyResults(true);
+  }
+
+  // Chip/radius/anchor changes can overlap an in-flight request (e.g. the
+  // user switches radius before the previous mirror-fallback chain settles).
+  // A monotonic sequence number lets a slower, older call recognize it's
+  // been superseded and avoid clobbering a newer result.
+  let nearbyRequestSeq = 0;
+  async function refreshNearbyResults(reResolve){
+    const resultsEl = document.getElementById("nearResults");
+    const storiesEl = document.getElementById("nearStories");
+    const anchorTextEl = document.getElementById("nearAnchorText");
+    if(!resultsEl) return;
+    const mySeq = ++nearbyRequestSeq;
+    const stillCurrent = ()=> mySeq===nearbyRequestSeq;
+
+    if(reResolve || !NEARBY_STATE.anchor){
+      NEARBY_STATE.anchor = await resolveAnchor();
+      if(!stillCurrent()) return;
+      if(anchorTextEl) anchorTextEl.textContent = NEARBY_STATE.anchor ? (NEARBY_STATE.anchor.label||"your location") : "—";
+    }
+    const anchor = NEARBY_STATE.anchor;
+    if(!anchor){
+      resultsEl.innerHTML = `<div class="state"><strong>Nothing to anchor to yet.</strong><br>Add itinerary dates or tap "Use my location" below.</div>`;
+      if(storiesEl) storiesEl.innerHTML = "";
+      return;
+    }
+    if(!NEARBY_STATE.categories.size){
+      resultsEl.innerHTML = `<div class="state">Pick at least one category above.</div>`;
+      return;
+    }
+
+    resultsEl.innerHTML = `<div class="skeleton"></div><div class="skeleton"></div>`;
+
+    const catKeys = [...NEARBY_STATE.categories].sort();
+    const rLat = roundForAPI(anchor.lat), rLon = roundForAPI(anchor.lon);
+    const cacheKey = `nearby:${rLat}:${rLon}:${NEARBY_STATE.radius}:${catKeys.join(",")}`;
+    const cached = cacheGet(cacheKey);
+
+    try{
+      if(!navigator.onLine) throw new Error("Offline");
+      const json = await fetchOverpass(buildOverpassQuery(rLat, rLon, NEARBY_STATE.radius, catKeys));
+      if(!stillCurrent()) return;
+      const places = normalizeOverpassElements(json, anchor);
+      cacheSet(cacheKey, places, 24*3600*1000);
+      renderNearbyResults(places, false);
+    }catch(err){
+      if(!stillCurrent()) return;
+      console.warn("Overpass failed:", err.message);
+      if(cached){
+        renderNearbyResults(cached.value, true);
+      } else {
+        resultsEl.innerHTML = `<div class="state err"><strong>Couldn't load nearby places.</strong><br>${esc(err.message)}
+          <div style="margin-top:10px"><button type="button" class="near-gps-btn" id="nearRetryBtn">Retry</button></div></div>`;
+        const retryBtn = document.getElementById("nearRetryBtn");
+        if(retryBtn) retryBtn.addEventListener("click", ()=>refreshNearbyResults(false), {once:true});
+      }
+    }
+
+    // Wikipedia is a bonus layer — never blocks or degrades the places list.
+    fetchWikipediaStories(anchor).then(stories=>{
+      if(!stillCurrent()) return;
+      if(storiesEl) storiesEl.innerHTML = renderStories(stories);
+    }).catch(err=>{
+      if(!stillCurrent()) return;
+      console.warn("Wikipedia stories failed (non-blocking):", err.message);
+      if(storiesEl) storiesEl.innerHTML = "";
+    });
+  }
+  function renderNearbyResults(places, stale){
+    const resultsEl = document.getElementById("nearResults");
+    if(!resultsEl) return;
+    const banner = stale ? `<div class="near-offline-banner">Offline — showing saved copy from earlier.</div>` : "";
+    resultsEl.innerHTML = places.length
+            ? banner + places.map(renderPlaceCard).join("")
+            : banner + `<div class="state">Nothing found nearby at this radius. Try a wider radius or a different category.</div>`;
+    const cnt = document.getElementById("count-nearby");
+    if(cnt) cnt.textContent = places.length ? `${places.length} nearby` : "";
   }
 
   // ---------- tab switching ----------
@@ -1127,6 +1694,7 @@
     }
     document.querySelectorAll("#subnav button").forEach(b=>b.classList.toggle("active", b.dataset.id===id));
     document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("is-active", p.id===id));
+    if(id==="nearby") onActivateNearby();
   }
 
   // Toggle the left/right "more tabs" affordances based on scroll position.
@@ -1193,10 +1761,15 @@
         <h2>${s.label}</h2>
         <span class="count" id="count-${s.id}"></span>
       </div>`}
-      <div id="sec-body-${s.id}">${s.overview ? `<div class="skeleton"></div><div class="skeleton"></div>` : `<div class="skeleton"></div><div class="skeleton"></div>`}</div>
+      <div id="sec-body-${s.id}">${s.virtual ? nearbyShellHTML() : `<div class="skeleton"></div><div class="skeleton"></div>`}</div>
     </section>`).join("");
+    wireNearbyUI();
 
-    Promise.all([...SECTIONS.map(loadSection), loadTripConfig()]).then(async(results)=>{
+    // Virtual sections (Nearby) have no sheet tab to load, and querying a
+    // donated Overpass instance on every page load — most of which never
+    // open the tab — is exactly the load pattern Overpass's 503s come from.
+    // initNearby fires lazily, on first activate("nearby") instead.
+    Promise.all([...SECTIONS.filter(s=>!s.virtual).map(loadSection), loadTripConfig()]).then(async(results)=>{
       // Last result is the Trip Config object
       const tripConfig = results[results.length - 1] || {};
       applyTripConfig(tripConfig);
@@ -1204,6 +1777,15 @@
       const offlinePrefix = navigator.onLine ? "" : "Offline — showing last loaded data. ";
       document.getElementById("updated").textContent =
               offlinePrefix + "Updated " + new Date().toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});
+    });
+
+    // "Around you NOW" can't rely on a Date frozen at page load (hard
+    // constraint 5) — re-resolve the anchor whenever the tab becomes visible
+    // again, e.g. a phone left open from breakfast through dinner.
+    document.addEventListener("visibilitychange", ()=>{
+      if(document.visibilityState==="visible" && document.getElementById("nearby")?.classList.contains("is-active")){
+        refreshNearbyResults(true);
+      }
     });
   }
   boot();
