@@ -640,10 +640,15 @@
   }
   function parseTimeLoose(s){
     if(!s) return null;
-    const m = String(s).trim().match(/^(\d{1,2}):(\d{2})\s*([AaPp][Mm])?$/);
+    // AM/PM is required: a bare "8:30" is ambiguous (could be 8:30am or
+    // 8:30pm) and silently guessing AM has caused real sheet rows to sort
+    // before times that were actually earlier that day, which then wrongly
+    // won the "Up next" pill. Treating it as unparsed (falls back to
+    // midnight, same as a row with no time at all) is safer than a wrong guess.
+    const m = String(s).trim().match(/^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/);
     if(!m) return null;
     let h = parseInt(m[1],10), min = parseInt(m[2],10);
-    const ap = m[3] ? m[3].toLowerCase() : null;
+    const ap = m[3].toLowerCase();
     if(ap==="pm" && h<12) h+=12;
     if(ap==="am" && h===12) h=0;
     return {h,min};
