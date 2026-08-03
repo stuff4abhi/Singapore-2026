@@ -384,6 +384,37 @@
     .stop .loc a{color:var(--jade);text-decoration:none;border-bottom:1px solid var(--jade-soft)}
     .stop .sn{font-size:13px;color:var(--mist);margin-top:3px}
 
+    /* ---------- Itinerary day selector ---------- */
+    /* Status colour is confined to the 5px dot; selection is jade fill (same
+       language as .chip[aria-pressed]). Tinting whole tiles by status would
+       put three accents in one strip and fight the selection state. */
+    /* Wraps rather than scrolls: a short trip fits one row, and nothing is
+       ever hidden off-screen. A horizontal scroller was tried first and
+       rejected — it hid the last tile behind the fade with no reliable way to
+       scroll it back into view. */
+    .daysel-row{display:flex;flex-wrap:wrap;gap:5px;align-items:stretch;margin:0 2px 18px}
+    .dchip{
+      flex:0 0 auto;font:inherit;cursor:pointer;position:relative;
+      display:flex;flex-direction:column;align-items:center;gap:1px;
+      min-width:44px;padding:7px 7px 8px;border-radius:14px;
+      border:1px solid var(--line);background:var(--line-soft);color:var(--ink-soft);
+      transition:background .18s,color .18s,border-color .18s;
+    }
+    .dchip .dow{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;opacity:.85}
+    .dchip .dnum{font-family:'Fraunces',serif;font-size:17px;font-weight:600;line-height:1.05}
+    .dchip .dmon{font-size:9.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;opacity:.7}
+    .dchip .ddot{width:5px;height:5px;border-radius:50%;margin-top:2px;background:var(--line)}
+    .dchip .ddot.st-done{background:var(--done)}
+    .dchip .ddot.st-next{background:var(--next)}
+    .dchip .ddot.st-later{background:var(--later)}
+    .dchip[data-today="true"]{border-color:var(--jade)}
+    .dchip[data-today="true"] .dow{color:var(--jade)}
+    .dchip[aria-pressed="true"]{background:var(--jade);color:#fff;border-color:var(--jade)}
+    .dchip[aria-pressed="true"] .ddot{box-shadow:0 0 0 1.5px rgba(255,255,255,.85)}
+    .dchip:focus-visible{outline:2px solid var(--jade);outline-offset:2px}
+    .dchip-all{justify-content:center;min-width:44px;padding:7px 8px}
+    .dchip-all .dmon{white-space:nowrap}
+
     /* ---------- States ---------- */
     .state{
       text-align:center;padding:40px 20px;color:var(--mist);font-size:14px;
@@ -947,37 +978,156 @@
     }).join("");
   }
 
-  function renderTimeline(rows, sec){
-    if(!rows.length) return emptyState(sec);
+  // Which itinerary sheet columns mean what. Shared by renderTimeline and the
+  // Overview's "Today's plan" filter — the two MUST agree on the date column
+  // or the filter and the renderer would disagree about what day a row is on.
+  function itineraryKeys(rows){ // -> {dK,tK,aK,lK,nK}
     const keys = rows[0] ? Object.keys(rows[0]) : [];
-    const dK = keys.find(k=>/date|day/i.test(k)) || keys[0];
-    const tK = keys.find(k=>/time/i.test(k));
-    const aK = keys.find(k=>/activity|event|title|plan/i.test(k)) || keys[1] || keys[0];
-    const lK = keys.find(k=>/location|venue|place|address/i.test(k));
-    const nK = keys.find(k=>/note|detail|tip/i.test(k));
+    return {
+      dK: keys.find(k=>/date|day/i.test(k)) || keys[0],
+      tK: keys.find(k=>/time/i.test(k)),
+      aK: keys.find(k=>/activity|event|title|plan/i.test(k)) || keys[1] || keys[0],
+      lK: keys.find(k=>/location|venue|place|address/i.test(k)),
+      nK: keys.find(k=>/note|detail|tip/i.test(k)),
+    };
+  }
 
-    // status is computed across the FULL flattened list, so "Up next" is the
-    // one genuinely next thing on the whole trip, not per-day.
-    const dtList = rows.map(r => ({ dt: combineDateTime(r[dK], tK && r[tK]) }));
+  // ---------- Itinerary day selector ----------
+  // The itinerary runs ~54 rows over 6 days; showing one day at a time keeps
+  // it scannable on a phone. `selected` is a day key (see buildItineraryDays)
+  // or ITIN_ALL; null means "resolve the default on next render".
+  // Session-only state, like NEARBY_STATE — a reload should re-resolve to
+  // today rather than restore a day the family has since travelled past.
+  const ITIN_ALL = "__all__";
+  const ITIN_STATE = { selected:null, userPicked:false, visibleCount:null };
+
+  // Group rows into days, chronologically, carrying each row's global status.
+  function buildItineraryDays(rows){ // -> { keys, days:[{key,label,date,dayNum,items,dayStatus}] }
+    const keys = itineraryKeys(rows);
+    const { dK, tK, aK, lK, nK } = keys;
+
+    // A row carrying only a date (no activity, location or note) is a stray
+    // blank in the sheet — the trailing 18-Aug row is one. It has nothing to
+    // render, so it would show up as a bare, textless timeline dot. Dropping
+    // it can't shift any other row's status, since it never has a time.
+    const live = rows.filter(r =>
+            (r[aK]||"").trim() || (lK && (r[lK]||"").trim()) || (nK && (r[nK]||"").trim()));
+    if(!live.length) return { keys, days:[] };
+
+    // Status is computed across the FULL flattened list, so "Up next" is the
+    // one genuinely next thing on the whole trip, not per-day. The day filter
+    // is applied later, to `days` — never to `rows` — or "Up next" would jump
+    // to the first item of whichever day happens to be selected.
+    const dtList = live.map(r => {
+      const dt = combineDateTime(r[dK], tK && r[tK]);
+      // combineDateTime falls back to midnight when the time is missing or
+      // unparseable (e.g. a bare "8:30" with no AM/PM), which would make the
+      // row look like the earliest thing that day and wrongly win "Up next".
+      // Sort those to the end of their own day instead. Display order is
+      // untouched — that stays sheet order.
+      if(dt && !parseTimeLoose(tK && r[tK])) dt.setHours(23,59,0,0);
+      return { dt };
+    });
     const statuses = computeLinearStatuses(dtList);
 
-    const groups = {}; // day label -> [{row, status}]
-    rows.forEach((r,i)=>{
-      const d = r[dK] || "Unscheduled";
-      (groups[d]=groups[d]||[]).push({ row:r, status: statuses[i] });
+    // Key on the PARSED date, not the raw cell, so "15-Aug-2026" and
+    // "15 Aug 2026" can't produce two tiles for the same day.
+    const byKey = new Map();
+    live.forEach((r,i)=>{
+      const d = parseDateLoose(r[dK]);
+      const key = d ? String(startOfDay(d).getTime()) : "unscheduled";
+      if(!byKey.has(key)){
+        byKey.set(key, {
+          key,
+          date: d ? startOfDay(d) : null,
+          label: d ? d.toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short"})
+                  : ((r[dK]||"").trim() || "Unscheduled"),
+          items: [],
+          seq: i, // preserve sheet order as the sort tiebreak
+        });
+      }
+      // dt is kept alongside status because resolveDefaultDayKey must compare
+      // against a *fresh* clock, and status is baked against the frozen NOW.
+      byKey.get(key).items.push({ row:r, status: statuses[i], dt: dtList[i].dt });
     });
 
-    return Object.entries(groups).map(([day, items])=>{
-      // day-level badge = the "best" status present that day (next > later > done)
-      const order = { next:0, later:1, done:2 };
-      const dayStatus = items.map(i=>i.status).filter(Boolean)
-              .sort((a,b)=>order[a]-order[b])[0];
-      const dayPill = dayStatus ? statusPill(dayStatus) : "";
-      return `
+    // Dated days ascending; anything undated sorts last.
+    const days = [...byKey.values()].sort((a,b)=>{
+      const ta = a.date ? a.date.getTime() : Infinity;
+      const tb = b.date ? b.date.getTime() : Infinity;
+      return ta - tb || a.seq - b.seq;
+    });
+
+    // day-level badge = the "best" status present that day (next > later > done)
+    const order = { next:0, later:1, done:2 };
+    let n = 0;
+    days.forEach(d=>{
+      if(d.date) d.dayNum = ++n;
+      d.dayStatus = d.items.map(i=>i.status).filter(Boolean).sort((a,b)=>order[a]-order[b])[0];
+    });
+    return { keys, days };
+  }
+
+  // Which day to show when the user hasn't picked one. `now` is a parameter,
+  // not NOW, so the visibilitychange hook can re-resolve with a fresh Date.
+  function resolveDefaultDayKey(days, now){
+    const dated = days.filter(d=>d.date);
+    if(!dated.length) return ITIN_ALL;
+    const today = startOfDay(now).getTime();
+    const hit = dated.find(d=>d.date.getTime() === today);
+    const nextDay = dated.find(d=>d.date.getTime() > today);
+    if(hit){
+      // Late at night, once everything today is done, "Up next" lives on
+      // tomorrow — so land there instead of on a fully greyed-out day.
+      // Tested against `now`, not against item.status: status is computed from
+      // the frozen NOW, so on a phone left open overnight it would still call
+      // yesterday's finished items "later" and never advance the day.
+      if(hit.items.some(i=>i.dt && i.dt.getTime() >= now.getTime())) return hit.key;
+      return nextDay ? nextDay.key : hit.key;
+    }
+    if(today < dated[0].date.getTime()) return dated[0].key;          // before the trip
+    const last = dated[dated.length-1];
+    if(today > last.date.getTime()) return last.key;                  // after the trip
+    return nextDay ? nextDay.key : last.key;                          // mid-trip gap day
+  }
+
+  function dayStripHTML(days, selectedKey){
+    const todayKey = String(startOfDay(NOW).getTime());
+    const dayCount = days.filter(d=>d.date).length;
+    const tiles = days.map(d=>{
+      const on = d.key === selectedKey;
+      const isToday = d.key === todayKey;
+      const dot = `<span class="ddot${d.dayStatus?" st-"+d.dayStatus:""}"></span>`;
+      const label = d.date
+              ? `<span class="dow">${esc(d.date.toLocaleDateString(undefined,{weekday:"short"}))}</span>
+             <span class="dnum">${d.date.getDate()}</span>
+             <span class="dmon">${esc(d.date.toLocaleDateString(undefined,{month:"short"}))}</span>`
+              : `<span class="dow">TBD</span><span class="dmon">No date</span>`;
+      const aria = d.date
+              ? `${d.label}${d.dayNum?`, day ${d.dayNum}`:""}, ${d.items.length} item${d.items.length>1?"s":""}`
+              : `Undated, ${d.items.length} item${d.items.length>1?"s":""}`;
+      return `<button type="button" class="dchip" data-itin-day="${esc(d.key)}"
+        aria-pressed="${on?"true":"false"}" aria-label="${esc(aria)}"${isToday?' data-today="true" aria-current="date"':""}>${label}${dot}</button>`;
+    }).join("");
+    return `
+    <div class="daysel-row" id="itinDaySel" role="group" aria-label="Trip day">
+      ${tiles}
+      <button type="button" class="dchip dchip-all" data-itin-day="${ITIN_ALL}"
+        aria-pressed="${selectedKey===ITIN_ALL?"true":"false"}" aria-label="Show all days">
+        <span class="dow">All</span><span class="dmon">${dayCount} days</span>
+      </button>
+    </div>`;
+  }
+
+  function dayTimelineHTML(day, keys){
+    const { tK, aK, lK, nK } = keys;
+    const dayPill = day.dayStatus ? statusPill(day.dayStatus) : "";
+    const dayNum = day.dayNum ? `<span class="cal">Day ${day.dayNum}</span>` : "";
+    return `
     <div class="day">
-      <div class="day-label">${esc(day)}<span class="line"></span>${dayPill}</div>
+      <div class="day-label">${dayNum}${esc(day.label)}<span class="line"></span>${dayPill}</div>
       <div class="timeline">
-        ${items.map(({row:r, status})=>`
+        ${day.items.map(({row:r, status})=>`
           <div class="stop ${status?'st-'+status:''}">
             ${tK&&r[tK]?`<div class="time">${esc(r[tK])}</div>`:""}
             <div class="act">${esc(r[aK]||"")}</div>
@@ -986,7 +1136,61 @@
           </div>`).join("")}
       </div>
     </div>`;
-    }).join("");
+  }
+
+  function renderTimeline(rows, sec){
+    if(!rows.length) return emptyState(sec);
+    const { keys, days } = buildItineraryDays(rows);
+    if(!days.length) return emptyState(sec);
+
+    // Covers both first paint (null) and a key that no longer exists because
+    // the sheet's dates changed under us.
+    if(ITIN_STATE.selected !== ITIN_ALL && !days.some(d=>d.key===ITIN_STATE.selected))
+      ITIN_STATE.selected = resolveDefaultDayKey(days, NOW);
+
+    // One day, or nothing dated: a selector would have nothing to switch to.
+    const strip = days.filter(d=>d.date).length > 1 ? dayStripHTML(days, ITIN_STATE.selected) : "";
+    const shown = days.filter(d => ITIN_STATE.selected === ITIN_ALL || d.key === ITIN_STATE.selected);
+    ITIN_STATE.visibleCount = shown.reduce((n,d)=>n+d.items.length, 0);
+    return strip + shown.map(d => dayTimelineHTML(d, keys)).join("");
+  }
+
+  // The header count tracks what's actually on screen, so it reads as the
+  // selected day's length (and the trip total when "All" is selected).
+  function updateItineraryCount(){
+    const cnt = document.getElementById("count-itinerary");
+    const n = ITIN_STATE.visibleCount;
+    if(cnt && n != null) cnt.textContent = n ? `${n} item${n>1?"s":""}` : "";
+  }
+
+  function rerenderItinerary(){
+    const el = document.getElementById("sec-body-itinerary");
+    const rows = SECTION_DATA["itinerary"] || [];
+    if(!el || !rows.length) return; // fetch failed — leave the error card alone
+    const wasFocused = document.activeElement && document.activeElement.closest("[data-itin-day]");
+    el.innerHTML = renderTimeline(rows, SECTIONS.find(s=>s.id==="itinerary"));
+    updateItineraryCount();
+    // The strip wraps rather than scrolls, so the newly selected tile is
+    // always already in view — only focus needs restoring across the rebuild.
+    if(wasFocused){
+      const sel = el.querySelector('.dchip[aria-pressed="true"]');
+      if(sel) sel.focus({preventScroll:true});
+    }
+  }
+
+  // Delegated on the persistent #itinerary panel, not #sec-body-itinerary —
+  // loadSection replaces that inner div's innerHTML wholesale, which would
+  // throw away a listener bound inside it.
+  function wireItineraryUI(){
+    const panel = document.getElementById("itinerary");
+    if(!panel) return;
+    panel.addEventListener("click", e=>{
+      const btn = e.target.closest("button[data-itin-day]");
+      if(!btn) return;
+      ITIN_STATE.selected = btn.dataset.itinDay;
+      ITIN_STATE.userPicked = true;
+      rerenderItinerary();
+    });
   }
 
   // ---------- data loading ----------
@@ -1006,6 +1210,8 @@
                       : renderCards(rows, sec);
       const cnt = document.getElementById("count-"+sec.id);
       if(cnt) cnt.textContent = rows.length ? `${rows.length} item${rows.length>1?"s":""}` : "";
+      // Itinerary shows one day at a time, so its count is the visible day's.
+      if(sec.id==="itinerary") updateItineraryCount();
       return true;
     }catch(err){
       SECTION_DATA[sec.id] = [];
@@ -1131,11 +1337,7 @@
     let todayHTML = "";
     const itinRows = SECTION_DATA["itinerary"] || [];
     if(itinRows.length){
-      const keys = Object.keys(itinRows[0]);
-      const dK = keys.find(k=>/date|day/i.test(k)) || keys[0];
-      const tK = keys.find(k=>/time/i.test(k));
-      const aK = keys.find(k=>/activity|event|title|plan/i.test(k)) || keys[1] || keys[0];
-      const lK = keys.find(k=>/location|venue|place|address/i.test(k));
+      const { dK, tK, aK, lK } = itineraryKeys(itinRows);
       const todays = itinRows.filter(r=>{
         const d = parseDateLoose(r[dK]);
         return d && startOfDay(d).getTime() === today.getTime();
@@ -1785,6 +1987,7 @@
       <div id="sec-body-${s.id}">${s.virtual ? nearbyShellHTML() : `<div class="skeleton"></div><div class="skeleton"></div>`}</div>
     </section>`).join("");
     wireNearbyUI();
+    wireItineraryUI();
 
     // Virtual sections (Nearby) have no sheet tab to load, and querying a
     // donated Overpass instance on every page load — most of which never
@@ -1804,8 +2007,21 @@
     // constraint 5) — re-resolve the anchor whenever the tab becomes visible
     // again, e.g. a phone left open from breakfast through dinner.
     document.addEventListener("visibilitychange", ()=>{
-      if(document.visibilityState==="visible" && document.getElementById("nearby")?.classList.contains("is-active")){
+      if(document.visibilityState!=="visible") return;
+      if(document.getElementById("nearby")?.classList.contains("is-active")){
         refreshNearbyResults(true);
+      }
+      // Same staleness problem for the itinerary's default day: a phone left
+      // open overnight would still be showing yesterday. Only auto-advance
+      // while the user has never picked a day, so we never yank the view out
+      // from under them. (The status pills themselves still derive from the
+      // frozen NOW at line 513 — that's a pre-existing, file-wide property.)
+      if(!ITIN_STATE.userPicked && document.getElementById("itinerary")?.classList.contains("is-active")){
+        const { days } = buildItineraryDays(SECTION_DATA["itinerary"] || []);
+        if(days.length){
+          const fresh = resolveDefaultDayKey(days, new Date());
+          if(fresh !== ITIN_STATE.selected){ ITIN_STATE.selected = fresh; rerenderItinerary(); }
+        }
       }
     });
   }

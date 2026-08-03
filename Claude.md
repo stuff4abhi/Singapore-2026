@@ -17,7 +17,7 @@ A fully functional, mobile-first **trip planning hub** for your Singapore 2026 f
 ### Five data sections (all live from Google Sheet)
 - **Tickets** — flights with PNR, seat, status
 - **Hotels** — check-in/out, address, booking ref, phone tap-to-call
-- **Itinerary** — day-by-day timeline with time, activity, location (tap-to-maps), notes
+- **Itinerary** — day-by-day timeline with time, activity, location (tap-to-maps), notes. A **day selector** (calendar tiles, one per trip day, plus "All") shows one day at a time; see "Itinerary day selector" below
 - **Bookings** — event name, date, confirmation number
 - **Event Info** — venue, timings, description, tips
 
@@ -143,16 +143,54 @@ Two more phases proposed to add more capability while maintaining the static-sit
 
 **Current (Phase 0 + Phase 2 — what's live now):**
 ```
-index.html (single file, ~1650 lines)
-├── inline CSS (design system + Nearby UI)
+index.html (single file, ~2035 lines)
+├── inline CSS (design system + Nearby UI + day selector)
 ├── inline JavaScript
 │   ├── cache helper (localStorage + stale fallback)
 │   ├── OLC Plus Code decoder (decode-only)
 │   ├── Overpass/Wikipedia fetchers (mirror fallback, 3 instances)
 │   ├── anchor resolution (itinerary/GPS/manual picker)
-│   └── haversine distance + card rendering
+│   ├── haversine distance + card rendering
+│   └── itinerary day model + day selector
 └── inline HTML (markup shell + Nearby panel)
 ```
+
+### Itinerary day selector
+
+The itinerary runs ~53 rows across 6 days, which was one long scroll on a
+phone. It now shows **one day at a time**, chosen from a wrapping strip of
+calendar tiles (weekday / date / month + a status dot), with an "All" tile to
+get the full timeline back. The header count tracks what's on screen.
+
+- **Default day** — `resolveDefaultDayKey()`: today if it's a trip day and
+  anything on it is still upcoming; otherwise the nearest upcoming day
+  (pre-trip → day 1, today-but-finished → tomorrow, post-trip → last day).
+- **`buildItineraryDays()`** groups rows by `startOfDay(parsedDate).getTime()`,
+  not the raw cell text, so two spellings of the same date can't split a day.
+- **The constraint that matters:** `computeLinearStatuses` runs over the *full*
+  row list, so "Up next" stays the one genuinely-next thing on the whole trip.
+  Filtering happens on the grouped `days`, **never on `rows`** — filtering rows
+  first would make "Up next" appear on the first item of whatever day is
+  selected. Verified: summing the per-day views yields exactly one "Up next".
+- Each item carries a `dt` alongside its `status`, because the default-day
+  resolver has to compare against a *fresh* clock while `status` is baked
+  against the page-load `NOW`. Reusing `status` there meant a phone left open
+  overnight never advanced the day.
+- Rows with an unparseable time (a bare `8:30` with no AM/PM) sort to the end of
+  their own day for status purposes rather than to midnight, so they can't
+  wrongly outrank a real morning item. Display order stays sheet order.
+- Rows with nothing renderable (date only, no activity/location/note) are
+  dropped — they used to draw a bare, textless timeline dot.
+- **The strip wraps; it does not scroll.** A horizontal scroller was tried first
+  and rejected: the last tile sat under the fade, and `scrollLeft` could not
+  reliably bring it back (Chrome's `scrollWidth` over-reported the strip's
+  overflow, so the computed centre was a position the strip would not honour).
+  Wrapping means nothing is ever off-screen and deletes the whole problem.
+  Tile sizing is tuned so all 6 days + "All" fit one row at 390px (~8px slack).
+- Session-only state (`ITIN_STATE`), no localStorage or URL hash — a reload
+  should re-resolve to today, not restore a day already travelled past.
+  `userPicked` suppresses the `visibilitychange` auto-advance once the user has
+  chosen a day manually, so the view is never yanked out from under them.
 
 **Recommended for scaling (if Phase 3/4 is added and js/ refactor is done):**
 ```
