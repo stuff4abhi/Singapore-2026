@@ -322,6 +322,7 @@
     .card.st-next::before{background:var(--next)}
     .card.st-later::before{background:var(--later)}
     .card.st-done{opacity:.72}
+    .card.card-veg{background:var(--jade-soft)}
     .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
     .card-title{font-size:16.5px;font-weight:600;margin:0;letter-spacing:-.01em;color:var(--ink)}
     .rows{margin-top:13px;display:grid;grid-template-columns:auto 1fr;gap:8px 16px}
@@ -963,6 +964,10 @@
       const noteKey = Object.keys(row).find(k=>/note|tip|description|detail/i.test(k));
       const title = row[tKey] || "Untitled";
       const status = statuses[i];
+      // "Type" doubles as a veg flag on the Eat & Drink tab (Tickets also has
+      // a Type column, but its values are "Flight", so this never mismatches).
+      const typeKey = Object.keys(row).find(k=>/^type$/i.test(k));
+      const isVeg = typeKey && /^veg(etarian)?$/i.test((row[typeKey]||"").trim());
       const overrideLabel = (sec.dated==="range" && status==="next" && checkinKey(row) &&
               parseDateLoose(row[checkinKey(row)]) && parseDateLoose(row[checkinKey(row)]).getTime() <= NOW.getTime())
               ? "Staying now" : null;
@@ -971,7 +976,7 @@
               .filter(([k,v]) => v && k!==tKey && k!==noteKey)
               .map(([k,v])=>`<dt>${esc(k)}</dt><dd>${smartValue(k,v,title)}</dd>`).join("");
       const note = (noteKey && row[noteKey]) ? `<div class="note">${esc(row[noteKey])}</div>` : "";
-      return `<article class="card ${status?'st-'+status:''}">
+      return `<article class="card ${status?'st-'+status:''}${isVeg?' card-veg':''}">
       <div class="card-top"><h3 class="card-title">${esc(title)}</h3>${pill}</div>
       ${dl?`<dl class="rows">${dl}</dl>`:""}${note}
     </article>`;
