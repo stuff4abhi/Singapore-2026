@@ -322,7 +322,8 @@
     .card.st-next::before{background:var(--next)}
     .card.st-later::before{background:var(--later)}
     .card.st-done{opacity:.72}
-    .card.card-veg{background:var(--jade-soft)}
+    .veg-mark{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:2px solid #1a7a1a;border-radius:3px;margin-left:auto;flex-shrink:0}
+    .veg-mark::after{content:'';display:block;width:8px;height:8px;border-radius:50%;background:#1a7a1a}
     .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
     .card-title{font-size:16.5px;font-weight:600;margin:0;letter-spacing:-.01em;color:var(--ink)}
     .rows{margin-top:13px;display:grid;grid-template-columns:auto 1fr;gap:8px 16px}
@@ -976,8 +977,8 @@
               .filter(([k,v]) => v && k!==tKey && k!==noteKey)
               .map(([k,v])=>`<dt>${esc(k)}</dt><dd>${smartValue(k,v,title)}</dd>`).join("");
       const note = (noteKey && row[noteKey]) ? `<div class="note">${esc(row[noteKey])}</div>` : "";
-      return `<article class="card ${status?'st-'+status:''}${isVeg?' card-veg':''}">
-      <div class="card-top"><h3 class="card-title">${esc(title)}</h3>${pill}</div>
+      return `<article class="card ${status?'st-'+status:''}">
+      <div class="card-top"><h3 class="card-title">${esc(title)}</h3>${pill}${isVeg?'<span class="veg-mark" title="Vegetarian"></span>':''}</div>
       ${dl?`<dl class="rows">${dl}</dl>`:""}${note}
     </article>`;
     }).join("");
