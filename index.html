@@ -324,6 +324,8 @@
     .card.st-done{opacity:.72}
     .veg-mark{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:2px solid #1a7a1a;border-radius:3px;margin-left:auto;flex-shrink:0}
     .veg-mark::after{content:'';display:block;width:8px;height:8px;border-radius:50%;background:#1a7a1a}
+    .veg-toggle{font-size:.72rem;padding:4px 11px;border-radius:20px;border:1.5px solid #1a7a1a;background:transparent;color:#1a7a1a;cursor:pointer;font-family:inherit;font-weight:600;letter-spacing:.01em;white-space:nowrap;transition:background .15s,color .15s}
+    .veg-toggle.active{background:#1a7a1a;color:#fff}
     .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
     .card-title{font-size:16.5px;font-weight:600;margin:0;letter-spacing:-.01em;color:var(--ink)}
     .rows{margin-top:13px;display:grid;grid-template-columns:auto 1fr;gap:8px 16px}
@@ -1199,6 +1201,33 @@
     });
   }
 
+  // ---------- veg filter ----------
+  let VEG_ONLY = false;
+
+  function rerenderFood(){
+    const sec = SECTIONS.find(s=>s.id==="food");
+    const rows = SECTION_DATA["food"] || [];
+    const el = document.getElementById("sec-body-food");
+    if(!el || !sec) return;
+    const filtered = VEG_ONLY ? rows.filter(r=>{
+      const tk = Object.keys(r).find(k=>/^type$/i.test(k));
+      return tk && /^veg(etarian)?$/i.test((r[tk]||"").trim());
+    }) : rows;
+    el.innerHTML = filtered.length ? renderCards(filtered, sec) : emptyState(sec);
+    const cnt = document.getElementById("count-food");
+    if(cnt) cnt.textContent = `${filtered.length} item${filtered.length!==1?"s":""}`;
+  }
+
+  function wireVegToggle(){
+    const btn = document.getElementById("veg-toggle-btn");
+    if(!btn) return;
+    btn.addEventListener("click", ()=>{
+      VEG_ONLY = !VEG_ONLY;
+      btn.classList.toggle("active", VEG_ONLY);
+      rerenderFood();
+    });
+  }
+
   // ---------- data loading ----------
   async function loadSection(sec){
     const el = document.getElementById("sec-body-"+sec.id);
@@ -1989,11 +2018,13 @@
         <span class="sec-icon">${s.icon}</span>
         <h2>${s.label}</h2>
         <span class="count" id="count-${s.id}"></span>
+        ${s.id==="food" ? '<button class="veg-toggle" id="veg-toggle-btn">🥦 Veg only</button>' : ""}
       </div>`}
       <div id="sec-body-${s.id}">${s.virtual ? nearbyShellHTML() : `<div class="skeleton"></div><div class="skeleton"></div>`}</div>
     </section>`).join("");
     wireNearbyUI();
     wireItineraryUI();
+    wireVegToggle();
 
     // Virtual sections (Nearby) have no sheet tab to load, and querying a
     // donated Overpass instance on every page load — most of which never
