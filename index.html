@@ -2018,7 +2018,7 @@
         <span class="sec-icon">${s.icon}</span>
         <h2>${s.label}</h2>
         <span class="count" id="count-${s.id}"></span>
-        ${s.id==="food" ? '<button class="veg-toggle" id="veg-toggle-btn">🥦 Veg only</button>' : ""}
+        ${s.id==="food" ? '<button class="veg-toggle" id="veg-toggle-btn">🥦 Veg</button>' : ""}
       </div>`}
       <div id="sec-body-${s.id}">${s.virtual ? nearbyShellHTML() : `<div class="skeleton"></div><div class="skeleton"></div>`}</div>
     </section>`).join("");
