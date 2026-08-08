@@ -117,19 +117,21 @@ Personal documents (passport/visa scans, tickets, hotel vouchers) used to be com
 - **Offline-ready:** `localStorage` cache with stale fallback, eviction that protects geocodes, mirror fallback (3 public Overpass instances)
 - **Live-tested:** verified with real Overpass outages, plus-code cross-checked against Google's decoder, all features working at 390px and desktop
 
+## Phase 3 — Shared Trip Journal (shipped)
+
+✅ **Family-contributed notes and photos** — full implementation details in [`phase3_plan.md`](phase3_plan.md)
+- A Google Form (name, note/memory, optional multi-photo upload) feeds a **dedicated Journal spreadsheet** (`JOURNAL_SHEET_ID`) — deliberately *not* a new tab on the main trip sheet (`SHEET_ID`). Two reasons: it scopes the Timestamp-format/timezone fix (Forms stamps in spreadsheet-local time; ISO format + `Asia/Singapore` timezone matter only for correct sort order) to a file with zero blast radius on Tickets/Hotels/Itinerary, and it keeps the one new link-viewable resource this phase introduces narrow — names/notes/photo links only, never PNRs or confirmation numbers.
+- **New top-level "Journal" nav pill**, peer to Travel/Do/Explore/Essentials — user-generated content gets equal billing, not a buried sub-tab. Single-item group correctly renders no redundant row-2 subnav (`renderSubnav`'s existing `< 2` items guard, same path Overview already exercised).
+- **Renderer** (`renderJournal`) shows entries newest-first with a thumbnail gallery. Drive file IDs are extracted by anchoring on `/file/d/` or `id=` in the URL — not by matching a bare token — because a stock phone filename can itself be a 25+ char token and would otherwise be picked up as a fake ID. Thumbnails use the undocumented `drive.google.com/thumbnail?id=` endpoint (not `uc?export=view`) because it transcodes, which is the only reason HEIC (iPhone) uploads render in an `<img>` at all; a broken/blocked thumbnail degrades via `onerror` to a plain "Open ↗" link rather than a broken-image glyph.
+- **`gvizURL`/`fetchTabRaw` generalized** to accept a per-section `sheetId` (defaulting to `SHEET_ID`) — the only wiring change beyond the new `SECTIONS` entry, needed because the app now reads from two spreadsheets instead of one.
+- Footer now links the Journal Form ("➕ Add a note or photo") instead of a bare "edit the sheet on your phone" instruction — see "Current risks & mitigations" below for why this is a UX choice, not a security control.
+- **Explicit non-goals kept for v1:** no in-app add/edit/delete UI (moderate by editing the Journal sheet directly, like every other section — and remember deleting a row does *not* delete the Drive photo, that's a separate manual step); no offline photo caching (Drive `<img>` loads are plain cross-origin, `sw.js`'s cross-origin bailout is untouched); no lightbox/zoom (click-through to Drive's own viewer); no approval queue (submission is already gated by restricting who can access the Form).
+
 ## Future phases (parked)
-
-Two more phases proposed to add more capability while maintaining the static-site + free model:
-
-### Phase 3 — Shared Trip Journal via Google Form
-- Family writes notes, uploads photos via a native Google Form (mobile-friendly, Drive upload built-in)
-- Form responses auto-append to a `Journal` sheet tab the site reads
-- Site renders a warm, chronological feed of memories — author, note, timestamp, photo gallery
-- You can moderate by editing/deleting rows; everything stays in your Sheet
 
 ### Phase 4 — Share to Instagram — full plan in [`phase4.md`](phase4.md)
 - Each family member shares a journal entry to **their own** Instagram via the OS share sheet (no API, no tokens, no shared account)
-- Hard prerequisite: Phase 3 must ship first — there is no feed to post from
+- Hard prerequisite (now met): Phase 3 has shipped, so there is a feed to post from
 - Instagram has no web publishing path for personal accounts, so edit/delete "sync" is local status tracking plus a nudge, never real sync
 - Do not fetch Drive photos into the share — that's the same pattern that failed in the retired offline-pinning work
 
@@ -145,19 +147,24 @@ Two more phases proposed to add more capability while maintaining the static-sit
 
 ## Architecture & structure
 
-**Current (Phase 0 + Phase 2 — what's live now):**
+**Current (Phase 0 + Phase 2 + Phase 3 — what's live now):**
 ```
-index.html (single file, ~2035 lines)
-├── inline CSS (design system + Nearby UI + day selector)
+index.html (single file, ~2200 lines)
+├── inline CSS (design system + Nearby UI + day selector + Journal gallery)
 ├── inline JavaScript
 │   ├── cache helper (localStorage + stale fallback)
 │   ├── OLC Plus Code decoder (decode-only)
 │   ├── Overpass/Wikipedia fetchers (mirror fallback, 3 instances)
 │   ├── anchor resolution (itinerary/GPS/manual picker)
 │   ├── haversine distance + card rendering
-│   └── itinerary day model + day selector
+│   ├── itinerary day model + day selector
+│   └── Journal renderer (Drive ID extraction, thumbnail gallery)
 └── inline HTML (markup shell + Nearby panel)
 ```
+Two spreadsheets now feed the site: `SHEET_ID` (main trip logistics) and
+`JOURNAL_SHEET_ID` (Journal, its own dedicated sheet — see Phase 3 above for
+why). `gvizURL`/`fetchTabRaw` take an optional `sheetId`, defaulting to
+`SHEET_ID`, so every other section is unaffected.
 
 ### Itinerary day selector
 
@@ -219,21 +226,33 @@ singapore-2026/
 
 ## Current risks & mitigations
 
-### Risk: Linking the Google Sheet directly in footer
-**The problem:** If you link the Sheet publicly, *all tabs become visible* — not just the Journal. Visitors see:
-- Flight PNRs, seat assignments
-- Hotel confirmation numbers
-- Full itinerary (dates, times, places)
-- Booking refs for attractions
-- Your Trip Config (family name, exact dates, party size)
+### Risk: both Sheets are link-viewable — the deployed site URL is the actual secret
+**The real posture, stated plainly (this replaces an earlier, incorrect framing):**
+the gviz endpoint this site uses can only read a spreadsheet that is shared
+"Anyone with the link — Viewer" (`index.html`'s `fetchTabRaw` raises exactly
+that as its failure hint if it isn't). That means, right now, **two**
+spreadsheet URLs are link-viewable, not zero:
 
-Anyone could screenshot the entire plan and know exactly where you are, when, with what confirmations.
+- **`SHEET_ID`** (main trip sheet) — pre-existing, unaffected by Phase 3. It
+  has PNRs, seat assignments, hotel and booking confirmation numbers, the full
+  itinerary, and Trip Config. `SHEET_ID` is a plain constant in `index.html`'s
+  page source, so anyone who views source on the public GitHub Pages site can
+  reconstruct this URL in seconds and read every tab.
+- **`JOURNAL_SHEET_ID`** (Journal, added in Phase 3) — narrower by design: only
+  names, notes, and photo links, never PNRs/confirmations. Same page-source
+  exposure, smaller blast radius.
 
-**Mitigation (recommended):** 
-- Keep the Sheet **private** (shared only with core organizers via email)
-- Link only the **Google Form** in the footer (➕ "Add a note or photo")
-- Users contribute via the Form (the intended flow), not by browsing the Sheet
-- Data stays secure; you moderate via the Sheet (which only you/organizers see)
+**Not linking either Sheet in the footer never protected either of them** —
+that only changes whether a casual visitor is *pointed at* the Sheet, not
+whether the Sheet is reachable. Genuinely fixing this needs a different
+architecture (a proxy, or real OAuth), not a footer edit — out of scope for
+now, but real, and should not be mistaken for solved.
+
+**What Phase 3's footer link actually is:** a **UX** choice — steer
+contributors to the Journal Form (➕ "Add a note or photo") instead of asking
+them to find and edit a raw Sheet tab, same as every other section is
+moderated by editing the Sheet directly. It is not, and was never, a security
+control.
 
 ---
 
@@ -246,6 +265,7 @@ Anyone could screenshot the entire plan and know exactly where you are, when, wi
 ✅ Graceful fallbacks (no spinners, no broken states)  
 ✅ One shareable link gets everyone on the same page  
 ✅ **Phase 2: Nearby places** (cafés, sights, transit within walking distance)  
+✅ **Phase 3: Shared Trip Journal** (Form-fed notes/photos, own dedicated sheet)  
 
 ---
 

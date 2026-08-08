@@ -360,6 +360,17 @@
     .file-actions a{font-size:13.5px;font-weight:600;color:var(--jade);text-decoration:none;border-bottom:1px solid var(--jade-soft);white-space:nowrap}
     .file-actions a:hover{border-bottom-color:var(--jade)}
 
+    /* ---------- Journal ---------- */
+    .journal-ts{font-size:11.5px;color:var(--mist);white-space:nowrap;padding-top:2px}
+    .journal-note{margin-top:11px;font-size:14px;color:var(--ink);white-space:pre-wrap}
+    .journal-gallery{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+    .journal-gallery a{display:block;width:96px;height:96px;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--line)}
+    .journal-gallery img{width:100%;height:100%;object-fit:cover;display:block}
+    .journal-gallery a.is-broken img{display:none}
+    .journal-gallery a.is-broken{display:flex;align-items:center;justify-content:center;background:var(--line-soft)}
+    .journal-gallery a.is-broken::after{content:"Open ↗";font-size:11px;font-weight:600;color:var(--ink-soft)}
+    .journal-more{font-size:13px;font-weight:600;color:var(--ink-soft)}
+
     /* ---------- Itinerary timeline ---------- */
     .day{margin-bottom:22px}
     .day-label{
@@ -518,7 +529,7 @@
 <footer>
   <div class="foot-brand" id="footBrand">Singapore 2026</div>
   Updates automatically from the shared Google Sheet.<br>
-  To edit, open the sheet on your phone and change any cell or add a row.
+  <a href="https://forms.gle/kJekgN6Cw7sRuPt16" target="_blank" rel="noopener">➕ Add a note or photo</a>
 </footer>
 
 <script>
@@ -530,6 +541,12 @@
      group: which nav cluster this tab sits under (Travel/Do/Explore/Essentials)
      ============================================================= */
   const SHEET_ID = "14g3BlnqTN7z8lzcNlmtB9sPPDRKIY238NoLpiT8pels";
+  // Journal lives in its own spreadsheet, not a tab on SHEET_ID — see
+  // phase3_plan.md decision #5 (isolates the Timestamp-format/timezone fix
+  // and keeps the one new link-viewable resource narrow: names/notes/photos
+  // only, never PNRs/confirmation numbers).
+  const JOURNAL_SHEET_ID = "1kjiP4kd5IYSCG8jcyfg5qIlTNykbmQESFfAQP_3NnqQ";
+  const JOURNAL_FORM_URL = "https://forms.gle/kJekgN6Cw7sRuPt16";
 
   const SECTIONS = [
     { id:"tickets",   label:"Flights",    tab:"Tickets",     icon:"✈️", dated:"single", group:"Travel"  },
@@ -542,13 +559,14 @@
     { id:"contacts",  label:"Contacts",   tab:"Essentials",  icon:"🚨", dated:"none",   group:"Essentials", render:"reference", refBucket:"contact" },
     { id:"info",      label:"Others",     tab:"Essentials",  icon:"🗒️", dated:"none",   group:"Essentials", render:"reference", refBucket:"info" },
     { id:"files",     label:"Files",      tab:"Files",       icon:"📁", dated:"none",   group:"Essentials", render:"files" },
+    { id:"journal",   label:"Journal",    tab:"Journal",     icon:"📔", dated:"none",   group:"Journal", render:"journal", sheetId: JOURNAL_SHEET_ID },
   ];
   /* ===================== end config ===================== */
 
   const NOW = new Date();
 
-  const gvizURL = tab =>
-          `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}&headers=1`;
+  const gvizURL = (tab, sheetId = SHEET_ID) =>
+          `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}&headers=1`;
 
   // ---------- gviz parsing ----------
   function parseGviz(text){
@@ -942,6 +960,74 @@
     return `<p class="files-hint">For offline access on your phone: open the <strong>Google Drive app</strong>, sign in with the account this folder is shared with, then open a file once and tap ⋮ → <strong>Make available offline</strong>.</p>${body}`;
   }
 
+  // Journal renderer: family-contributed notes/photos from a Google Form,
+  // newest-first. Doesn't call emptyState() — that helper's copy points at
+  // editing the Sheet directly, the opposite of where Journal contributors
+  // should go — so it gets its own empty-state string pointing at the Form.
+  function journalKeys(rows){
+    const keys = Object.keys(rows[0]);
+    return {
+      tsK:    keys.find(k=>/timestamp/i.test(k)) || keys[0],
+      nameK:  keys.find(k=>/name|author|who/i.test(k)),
+      noteK:  keys.find(k=>/note|memory|message|story/i.test(k)),
+      photoK: keys.find(k=>/photo|image|picture|upload/i.test(k)),
+    };
+  }
+
+  // Extract every Drive file ID in the cell by anchoring on the ID's position
+  // in the URL. Two things this deliberately does NOT do:
+  //  - match a bare ~25-char token anywhere in the string. Forms writes the
+  //    filename alongside the URL, and a stock phone filename like
+  //    PXL_20260808_143205123_MP.jpg has a 25-char word-token before the dot —
+  //    it would match first and yield a thumbnail URL for a nonexistent ID.
+  //  - split the cell on "," or newline first. Forms joins multiple uploads
+  //    with ", " and filenames routinely contain commas, so any delimiter
+  //    split shreds them. Matching globally has no delimiter assumption at all.
+  function driveFileIds(cell){
+    return [...String(cell||"").matchAll(/(?:\/file\/d\/|[?&]id=)([-\w]{20,})/g)]
+      .map(m => m[1]);
+  }
+
+  // thumbnail?id= is undocumented and carries no committed contract — it has
+  // worked for years and is an accepted risk for this site. Do NOT "simplify"
+  // it to uc?export=view: the thumbnail endpoint transcodes, which is the only
+  // reason iPhone HEIC uploads render at all (no browser decodes HEIC in <img>).
+  function driveThumb(id){ return `https://drive.google.com/thumbnail?id=${id}&sz=w600`; }
+  function driveView(id){  return `https://drive.google.com/file/d/${id}/view`; }
+
+  const JOURNAL_MAX_THUMBS = 4;
+  function renderJournal(rows, sec){
+    const hint = `<p class="files-hint">Have a memory to add? <a href="${JOURNAL_FORM_URL}" target="_blank" rel="noopener">➕ Submit via the Google Form</a>.</p>`;
+    if(!rows.length){
+      return hint + `<div class="state">No memories yet — be the first!</div>`;
+    }
+    const { tsK, nameK, noteK, photoK } = journalKeys(rows);
+
+    const sorted = [...rows].sort((a,b)=>
+      (parseDateLoose(b[tsK])?.getTime()||0) - (parseDateLoose(a[tsK])?.getTime()||0)); // newest-first; reverse for oldest-first
+
+    return hint + sorted.map(r=>{
+      const who = (nameK && r[nameK]) || "Someone";
+      // Phase 4 (share to Instagram) has to address a single entry. The sheet
+      // has no row id, but timestamp+name is stable across re-fetches.
+      const entryId = `${r[tsK]||""}|${who}`;
+      const ids = photoK ? driveFileIds(r[photoK]) : [];
+      const shown = ids.slice(0, JOURNAL_MAX_THUMBS);
+      const more = ids.length - shown.length;
+      const gallery = ids.length ? `<div class="journal-gallery">${
+        shown.map(id=>`<a href="${driveView(id)}" target="_blank" rel="noopener"><img loading="lazy" decoding="async" width="96" height="96" referrerpolicy="no-referrer" onerror="this.closest('a').classList.add('is-broken')" src="${driveThumb(id)}" alt="Photo from ${esc(who)}"></a>`).join("")
+      }${more>0 ? `<span class="journal-more">+${more}</span>` : ""}</div>` : "";
+      return `<article class="card journal-entry" data-entry-id="${esc(entryId)}">
+        <div class="card-top">
+          <h3 class="card-title">${esc(who)}</h3>
+          <span class="journal-ts">${esc(r[tsK] || "")}</span>
+        </div>
+        ${noteK && r[noteK] ? `<div class="journal-note">${esc(r[noteK])}</div>` : ""}
+        ${gallery}
+      </article>`;
+    }).join("");
+  }
+
   // ---------- renderers ----------
   function renderCards(rows, sec){
     if(!rows.length) return emptyState(sec);
@@ -1231,10 +1317,13 @@
   // twice on every page load.
   const SHEET_CACHE_TTL = 5*60*1000;
   const tabFetchPromises = new Map();
-  function fetchTabRaw(tab){
+  // tabFetchPromises/cacheSet stay keyed by tab name alone across both
+  // spreadsheets — safe only because no two sections share a tab name; if
+  // that ever changes, fold sheetId into the key too.
+  function fetchTabRaw(tab, sheetId = SHEET_ID){
     if(!tabFetchPromises.has(tab)){
       tabFetchPromises.set(tab, (async()=>{
-        const res = await fetch(gvizURL(tab));
+        const res = await fetch(gvizURL(tab, sheetId));
         const text = await res.text();
         if(!res.ok) throw new Error(`HTTP ${res.status} from Google — usually a sharing/permission issue, not a missing tab.`);
         if(!/setResponse/.test(text)) throw new Error(`Google didn't return sheet data (got a login/error page instead). Check the sheet is shared as "Anyone with the link — Viewer".`);
@@ -1252,6 +1341,7 @@
     el.innerHTML = sec.render==="timeline" ? renderTimeline(rows, sec)
             : sec.render==="reference" ? renderReference(rows, sec)
             : sec.render==="files" ? renderFiles(rows, sec)
+            : sec.render==="journal" ? renderJournal(rows, sec)
                     : renderCards(rows, sec);
     const cnt = document.getElementById("count-"+sec.id);
     if(cnt) cnt.textContent = rows.length ? `${rows.length} item${rows.length>1?"s":""}` : "";
@@ -1268,7 +1358,7 @@
     const cached = cacheGet("tab:"+sec.tab);
     if(cached) renderSectionRows(sec, el, cached.value);
     try{
-      const rows = await fetchTabRaw(sec.tab);
+      const rows = await fetchTabRaw(sec.tab, sec.sheetId);
       renderSectionRows(sec, el, rows);
       return true;
     }catch(err){
@@ -1415,7 +1505,8 @@
     }
 
     // --- 4. Quick counts + jump links ---
-    const countable = SECTIONS.filter(s=>s.id!=="overview" && !s.virtual);
+    // Journal excluded: a "0 Journal" tile pre-trip reads as broken, not as a nudge.
+    const countable = SECTIONS.filter(s=>s.id!=="overview" && s.id!=="journal" && !s.virtual);
     const tilesHTML = `
     <p class="ov-block-label">Everything in this trip</p>
     <div class="ov-counts">
@@ -2020,7 +2111,7 @@
     // Explore / Essentials), row 2 (#subnav) shows only the active group's
     // section tabs. Keeps row 1 short enough to never need scrolling, even
     // as more sections get added within a group.
-    const GROUP_ICON = { Travel:"🧭", Do:"🗺️", Explore:"🍜", Essentials:"🛟" };
+    const GROUP_ICON = { Travel:"🧭", Do:"🗺️", Explore:"🍜", Essentials:"🛟", Journal:"📔" };
     GROUPS = [];
     NAV.forEach(s=>{
       const key = s.group || s.id;
@@ -2096,6 +2187,11 @@
           const fresh = resolveDefaultDayKey(days, new Date());
           if(fresh !== ITIN_STATE.selected){ ITIN_STATE.selected = fresh; rerenderItinerary(); }
         }
+      }
+      // The Journal Form opens in a new tab; refetch on return so a fresh
+      // submission shows up without a manual reload.
+      if(document.getElementById("journal")?.classList.contains("is-active")){
+        loadSection(SECTIONS.find(s=>s.id==="journal"));
       }
     });
   }
