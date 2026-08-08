@@ -370,6 +370,14 @@
     .journal-gallery a.is-broken{display:flex;align-items:center;justify-content:center;background:var(--line-soft)}
     .journal-gallery a.is-broken::after{content:"Open ↗";font-size:11px;font-weight:600;color:var(--ink-soft)}
     .journal-more{font-size:13px;font-weight:600;color:var(--ink-soft)}
+    .journal-lock{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:20px 18px}
+    .journal-lock-label{font-size:13.5px;color:var(--ink-soft);margin:0 0 14px}
+    .journal-lock-row{display:flex;gap:10px;flex-wrap:wrap}
+    .journal-lock-row input{flex:1;min-width:160px;font:inherit;font-size:15px;padding:10px 13px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--card);color:var(--ink)}
+    .journal-lock-row input:focus{outline:2px solid var(--jade-soft);outline-offset:1px}
+    .journal-lock-row button{font:inherit;font-size:14px;font-weight:600;padding:10px 18px;border:none;border-radius:var(--radius-sm);background:var(--jade);color:#fff;cursor:pointer}
+    .journal-lock-row button:hover{opacity:.92}
+    .journal-lock-error{font-size:13px;color:var(--next);margin:10px 0 0}
 
     /* ---------- Itinerary timeline ---------- */
     .day{margin-bottom:22px}
@@ -547,6 +555,17 @@
   // only, never PNRs/confirmation numbers).
   const JOURNAL_SHEET_ID = "1kjiP4kd5IYSCG8jcyfg5qIlTNykbmQESFfAQP_3NnqQ";
   const JOURNAL_FORM_URL = "https://forms.gle/kJekgN6Cw7sRuPt16";
+  // Journal passcode is a soft UI deterrent, not real security — this is a
+  // zero-backend static site, so nothing client-side can keep a secret from
+  // someone who actually opens dev tools. Storing SHA-256(salt+passcode)
+  // instead of the plain passcode just stops it being instantly readable
+  // via view-source; it does not stop offline brute-forcing of a short,
+  // human-shareable code once someone has the hash. Change the passcode by
+  // computing a new salt+hash pair (see phase3_plan.md/CLAUDE.md) — the
+  // plaintext is never stored here.
+  const JOURNAL_PASSCODE_SALT = "d498e95419028edccf21eb114b60d750";
+  const JOURNAL_PASSCODE_HASH = "d1d65b228af12c8b854f76548e3a75d179b849460289a94e006c589ae21082cf";
+  const JOURNAL_UNLOCK_KEY = "sg2026-journal-unlocked";
 
   const SECTIONS = [
     { id:"tickets",   label:"Flights",    tab:"Tickets",     icon:"✈️", dated:"single", group:"Travel"  },
@@ -1028,6 +1047,51 @@
     }).join("");
   }
 
+  // ---------- Journal passcode gate ----------
+  // A soft UI deterrent only — see the comment on JOURNAL_PASSCODE_HASH.
+  // Data fetch/caching for the journal tab happens exactly like every other
+  // section regardless of lock state (boot()'s Promise.all doesn't know
+  // about the gate); only the DOM rendering is withheld until unlocked.
+  async function sha256Hex(str){
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
+  }
+  function journalUnlocked(){
+    try{ return localStorage.getItem(JOURNAL_UNLOCK_KEY)==="1"; }catch(e){ return false; }
+  }
+  function renderJournalLock(){
+    return `<form id="journal-lock-form" class="journal-lock">
+      <p class="journal-lock-label">This section is passcode-protected — ask the trip organizer for the code.</p>
+      <div class="journal-lock-row">
+        <input type="password" id="journal-passcode-input" placeholder="Passcode" autocomplete="off" required>
+        <button type="submit">Unlock</button>
+      </div>
+      <p class="journal-lock-error" hidden>Incorrect passcode — try again.</p>
+    </form>`;
+  }
+  // Delegated on document (not the form itself) since #sec-body-journal's
+  // innerHTML — and the form inside it — gets replaced on every re-render
+  // (cache-hit paint, fresh fetch, visibilitychange refetch), which would
+  // silently drop a listener bound directly to the form.
+  function wireJournalLock(){
+    document.addEventListener("submit", async e=>{
+      const form = e.target.closest("#journal-lock-form");
+      if(!form) return;
+      e.preventDefault();
+      const input = form.querySelector("#journal-passcode-input");
+      const hash = await sha256Hex(JOURNAL_PASSCODE_SALT + input.value);
+      if(hash === JOURNAL_PASSCODE_HASH){
+        try{ localStorage.setItem(JOURNAL_UNLOCK_KEY, "1"); }catch(e){ /* worst case: re-prompted next visit */ }
+        const sec = SECTIONS.find(s=>s.id==="journal");
+        renderSectionRows(sec, document.getElementById("sec-body-journal"), SECTION_DATA["journal"] || []);
+      }else{
+        form.querySelector(".journal-lock-error").hidden = false;
+        input.value = "";
+        input.focus();
+      }
+    });
+  }
+
   // ---------- renderers ----------
   function renderCards(rows, sec){
     if(!rows.length) return emptyState(sec);
@@ -1341,7 +1405,7 @@
     el.innerHTML = sec.render==="timeline" ? renderTimeline(rows, sec)
             : sec.render==="reference" ? renderReference(rows, sec)
             : sec.render==="files" ? renderFiles(rows, sec)
-            : sec.render==="journal" ? renderJournal(rows, sec)
+            : sec.render==="journal" ? (journalUnlocked() ? renderJournal(rows, sec) : renderJournalLock())
                     : renderCards(rows, sec);
     const cnt = document.getElementById("count-"+sec.id);
     if(cnt) cnt.textContent = rows.length ? `${rows.length} item${rows.length>1?"s":""}` : "";
@@ -2153,6 +2217,7 @@
     wireNearbyUI();
     wireItineraryUI();
     wireVegToggle();
+    wireJournalLock();
 
     // Virtual sections (Nearby) have no sheet tab to load, and querying a
     // donated Overpass instance on every page load — most of which never
