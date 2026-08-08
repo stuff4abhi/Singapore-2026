@@ -471,9 +471,9 @@
 
 <header class="hero">
   <div class="hero-photo">
-    <video autoplay muted loop playsinline preload="metadata"
+    <video autoplay muted loop playsinline preload="none"
            poster="https://images.pexels.com/videos/35061521/4-k-video-a-beautiful-view-architecture-at-night-city-35061521.jpeg?auto=compress&cs=tinysrgb&h=900&fit=crop&w=1600">
-      <source src="https://videos.pexels.com/video-files/35061521/14852253_2560_1440_30fps.mp4" type="video/mp4">
+      <source data-src="https://videos.pexels.com/video-files/35061521/14852253_2560_1440_30fps.mp4" type="video/mp4">
     </video>
   </div>
   <div class="hero-tone"></div>
@@ -699,11 +699,7 @@
   // Reads the "Trip Config" sheet and returns a key-value map: {tripName, dates, partySize, ...}
   async function loadTripConfig(){
     try{
-      const res = await fetch(gvizURL("Trip Config"));
-      if(!res.ok) throw new Error("HTTP "+res.status);
-      const text = await res.text();
-      if(!/setResponse/.test(text)) throw new Error("No data from Trip Config sheet");
-      const { rows } = parseGviz(text);
+      const rows = await fetchTabRaw("Trip Config");
       const config = {};
       rows.forEach(r=>{
         const keys = Object.keys(r);
@@ -1229,26 +1225,54 @@
   }
 
   // ---------- data loading ----------
+  // Raw (unfiltered) rows are cached and fetched per SHEET TAB, not per
+  // section — "contacts" and "info" both read the "Essentials" tab, so
+  // fetchTabRaw memoizes in-flight requests to avoid firing that fetch
+  // twice on every page load.
+  const SHEET_CACHE_TTL = 5*60*1000;
+  const tabFetchPromises = new Map();
+  function fetchTabRaw(tab){
+    if(!tabFetchPromises.has(tab)){
+      tabFetchPromises.set(tab, (async()=>{
+        const res = await fetch(gvizURL(tab));
+        const text = await res.text();
+        if(!res.ok) throw new Error(`HTTP ${res.status} from Google — usually a sharing/permission issue, not a missing tab.`);
+        if(!/setResponse/.test(text)) throw new Error(`Google didn't return sheet data (got a login/error page instead). Check the sheet is shared as "Anyone with the link — Viewer".`);
+        const { rows } = parseGviz(text);
+        cacheSet("tab:"+tab, rows, SHEET_CACHE_TTL);
+        return rows;
+      })().catch(err=>{ tabFetchPromises.delete(tab); throw err; }));
+    }
+    return tabFetchPromises.get(tab);
+  }
+
+  function renderSectionRows(sec, el, rawRows){
+    const rows = sec.refBucket ? splitByCategory(rawRows, sec.refBucket) : rawRows;
+    SECTION_DATA[sec.id] = rows;                       // cache for the Overview
+    el.innerHTML = sec.render==="timeline" ? renderTimeline(rows, sec)
+            : sec.render==="reference" ? renderReference(rows, sec)
+            : sec.render==="files" ? renderFiles(rows, sec)
+                    : renderCards(rows, sec);
+    const cnt = document.getElementById("count-"+sec.id);
+    if(cnt) cnt.textContent = rows.length ? `${rows.length} item${rows.length>1?"s":""}` : "";
+    // Itinerary shows one day at a time, so its count is the visible day's.
+    if(sec.id==="itinerary") updateItineraryCount();
+  }
+
   async function loadSection(sec){
     const el = document.getElementById("sec-body-"+sec.id);
+    // Stale-while-revalidate: paint instantly from the last cached copy of
+    // this tab (if any) so the page never sits on skeletons waiting for
+    // Google, then always fetch fresh underneath for correctness (status
+    // pills, "Up next," any edits the family just made).
+    const cached = cacheGet("tab:"+sec.tab);
+    if(cached) renderSectionRows(sec, el, cached.value);
     try{
-      const res = await fetch(gvizURL(sec.tab));
-      const text = await res.text();
-      if(!res.ok) throw new Error(`HTTP ${res.status} from Google — usually a sharing/permission issue, not a missing tab.`);
-      if(!/setResponse/.test(text)) throw new Error(`Google didn't return sheet data (got a login/error page instead). Check the sheet is shared as "Anyone with the link — Viewer".`);
-      let { rows } = parseGviz(text);
-      if(sec.refBucket) rows = splitByCategory(rows, sec.refBucket);
-      SECTION_DATA[sec.id] = rows;                       // cache for the Overview
-      el.innerHTML = sec.render==="timeline" ? renderTimeline(rows, sec)
-              : sec.render==="reference" ? renderReference(rows, sec)
-              : sec.render==="files" ? renderFiles(rows, sec)
-                      : renderCards(rows, sec);
-      const cnt = document.getElementById("count-"+sec.id);
-      if(cnt) cnt.textContent = rows.length ? `${rows.length} item${rows.length>1?"s":""}` : "";
-      // Itinerary shows one day at a time, so its count is the visible day's.
-      if(sec.id==="itinerary") updateItineraryCount();
+      const rows = await fetchTabRaw(sec.tab);
+      renderSectionRows(sec, el, rows);
       return true;
     }catch(err){
+      if(cached) return true; // already showing a stale-but-valid copy — don't clobber it with an error state
       SECTION_DATA[sec.id] = [];
       const isNetworkBlock = err instanceof TypeError;
       const msg = isNetworkBlock
@@ -1966,14 +1990,27 @@
   }
 
   function boot(){
-    // Hero video: if autoplay is blocked (some mobile browsers) or the file
-    // fails to load, quietly fall back to the poster frame — never show a
-    // broken video box. The poster + background-color already cover this
-    // visually; this just retries play() once, which is enough for most cases.
+    // Hero video: the <source> ships with no src (see markup) so the 14MB
+    // clip never competes with the Sheet fetches for bandwidth during first
+    // paint. We attach the real src on window "load" — by then the critical
+    // content is already in flight — and skip it entirely on data-saver
+    // connections, slow (2g) connections, or prefers-reduced-motion, where
+    // the poster frame alone is the better, cheaper experience. If autoplay
+    // is blocked (some mobile browsers) or the file fails to load, quietly
+    // fall back to the poster frame — never show a broken video box.
     const heroVid = document.querySelector(".hero-photo video");
     if(heroVid){
-      heroVid.play().catch(()=>{ /* autoplay blocked — poster frame remains visible, which is fine */ });
       heroVid.addEventListener("error", ()=>{ heroVid.style.display = "none"; }, {once:true});
+      const conn = navigator.connection;
+      const skipVideo = (conn && (conn.saveData || /2g/.test(conn.effectiveType||"")))
+              || matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if(!skipVideo){
+        window.addEventListener("load", ()=>{
+          const source = heroVid.querySelector("source[data-src]");
+          if(source){ source.src = source.dataset.src; heroVid.load(); }
+          heroVid.play().catch(()=>{ /* autoplay blocked — poster frame remains visible, which is fine */ });
+        }, {once:true});
+      }
     }
 
     // Overview is a virtual section (no sheet tab) shown first, ungrouped.

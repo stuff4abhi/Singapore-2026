@@ -52,6 +52,9 @@ A fully functional, mobile-first **trip planning hub** for your Singapore 2026 f
 
 ### Offline & performance
 - Data loads from Google Sheets via gviz API; graceful fallback if sheet fails
+- **Sheet data cached (stale-while-revalidate)** — each tab's parsed rows are cached in localStorage; sections render instantly from the last cached copy while a fresh fetch runs underneath, so revisits don't sit on skeletons waiting for Google. First-ever visit is unaffected (no cache yet)
+- **Per-tab fetch dedup** — sections that read the same tab (Contacts/Others both read "Essentials") share one in-flight request instead of firing it twice
+- **Hero video deferred + connection-aware** — the ~14MB clip ships with no `src` and only attaches one on `window.load`, so it never competes with Sheet fetches for bandwidth on first paint; skipped entirely on `navigator.connection.saveData`, 2G-class connections, or `prefers-reduced-motion` (poster frame stands in)
 - Optimized single-file design (no build step, no dependencies)
 - Fast on mobile networks
 
@@ -59,6 +62,7 @@ A fully functional, mobile-first **trip planning hub** for your Singapore 2026 f
 
 - Resolved Eat & Drink header-as-data bug — gviz sometimes fails to detect headers; added safety net to promote real header row if needed
 - Added restaurant map links — address field combines name + address + Singapore for strongest Maps match
+- Performance pass — Sheet-tab caching + fetch dedup, deferred/connection-aware hero video load (see "Offline & performance" above)
 
 ### Data structure (Google Sheet)
 
@@ -133,7 +137,7 @@ Two more phases proposed to add more capability while maintaining the static-sit
 ### Foundation for Phases 3/4: PWA + offline + refactor
 - A **minimal** service worker + manifest already ship as part of the Files feature (app-shell caching + installability only)
 - Refactor single file into organized modules (config.js, cache.js, nearby.js, journal.js, etc.) — still not done, but Phase 2 proves it's structurally feasible
-- Implement localStorage caching of Sheet data (all tabs, not just the app shell) so the site opens instantly and works fully offline — Phase 2 has this for Overpass/Wikipedia, good foundation to extend
+- ~~Implement localStorage caching of Sheet data (all tabs, not just the app shell)~~ — **done**: stale-while-revalidate cache per tab, see "Offline & performance" above. Still open: this caches for instant *render*, not full offline-first (no fallback UI yet if the very first load has no network and no cache)
 - Show "Updated 2 min ago / offline — showing saved copy" timestamp for Sheet data freshness (Files and Nearby sections already have narrower offline messaging; this would extend site-wide)
 - Makes travel truly work — bad hotel wifi? App opens instantly and works anyway
 
